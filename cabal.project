@@ -1,0 +1,7 @@
+packages:
+    p2p-net/
+    game-engine/
+    game-client/
+
+-- Esto ayuda a que la compilación sea más rápida compartiendo caché
+optimization: True
