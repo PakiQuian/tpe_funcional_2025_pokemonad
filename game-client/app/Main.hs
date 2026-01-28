@@ -5,14 +5,15 @@ import Graphics.Gloss.Interface.Pure.Game
 
 -- 1. MODELO DE DATOS (ESTADO)
 --------------------------------------------------------------------------------
--- Definimos las 3 pantallas posibles
-data Screen = Menu | Pokedex | Multiplayer | PlayingAI
+-- Definimos las pantallas posibles (agregamos StartScreen)
+data Screen = StartScreen | Menu | Pokedex | Multiplayer | PlayingAI
     deriving (Show, Eq)
 
 data GameState = GameState
     { currentScreen  :: Screen      -- En qué pantalla estamos
     , selectedOption :: Int         -- Indice del menú (0, 1, 2)
-    , bgImage        :: Picture     -- La imagen de fondo cargada en memoria
+    , startBgImage   :: Picture     -- Imagen de fondo para pantalla de inicio
+    , menuBgImage    :: Picture     -- Imagen de fondo para menú principal
     }
 
 -- Las opciones del menú en texto
@@ -23,12 +24,13 @@ menuOptions =
     , "3. Jugar vs AI"
     ]
 
--- Estado inicial: Menú, opción 0, y la imagen que pasaremos al iniciar
-initialState :: Picture -> GameState
-initialState loadedBg = GameState
-    { currentScreen = Menu
+-- Estado inicial: Pantalla de inicio, opción 0, y las imágenes cargadas
+initialState :: Picture -> Picture -> GameState
+initialState startBg menuBg = GameState
+    { currentScreen = StartScreen
     , selectedOption = 0
-    , bgImage = loadedBg
+    , startBgImage = startBg
+    , menuBgImage = menuBg
     }
 
 -- 2. VISTA (RENDER)
@@ -36,7 +38,8 @@ initialState loadedBg = GameState
 --------------------------------------------------------------------------------
 draw :: GameState -> Picture
 draw state = case currentScreen state of
-    Menu -> pictures [ bgImage state  -- 1. Dibujamos el fondo primero
+    StartScreen -> startBgImage state  -- Solo la pantalla de inicio
+    Menu -> pictures [ menuBgImage state  -- 1. Dibujamos el fondo del menú
                      , drawMenu (selectedOption state) -- 2. Dibujamos el menú encima
                      ]
     Pokedex -> pictures [ blank, color white $ text "Pantalla Pokedex (ESC para volver)" ]
@@ -76,24 +79,36 @@ drawOption currentSelection index label =
 -- Reacciona a eventos de teclado
 --------------------------------------------------------------------------------
 handleInput :: Event -> GameState -> GameState
+-- Teclas específicas primero
 handleInput (EventKey (SpecialKey KeyUp) Down _ _) state = 
     case currentScreen state of
+        StartScreen -> state { currentScreen = Menu }
         Menu -> state { selectedOption = max 0 (selectedOption state - 1) }
         _    -> state
 
 handleInput (EventKey (SpecialKey KeyDown) Down _ _) state = 
     case currentScreen state of
+        StartScreen -> state { currentScreen = Menu }
         Menu -> state { selectedOption = min 2 (selectedOption state + 1) }
         _    -> state
 
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state = 
     case currentScreen state of
+        StartScreen -> state { currentScreen = Menu }
         Menu -> state { currentScreen = chooseScreen (selectedOption state) }
         _    -> state
 
 handleInput (EventKey (SpecialKey KeyEsc) Down _ _) state = 
-    -- ESC siempre vuelve al menú
-    state { currentScreen = Menu }
+    -- ESC vuelve al menú (excepto desde StartScreen que pasa al menú también)
+    case currentScreen state of
+        StartScreen -> state { currentScreen = Menu }
+        _           -> state { currentScreen = Menu }
+
+-- Cualquier otra tecla en StartScreen pasa al menú principal
+handleInput (EventKey _ Down _ _) state =
+    case currentScreen state of
+        StartScreen -> state { currentScreen = Menu }
+        _           -> state
 
 -- Ignoramos cualquier otro evento (mouse, soltar teclas, etc.)
 handleInput _ state = state
@@ -117,21 +132,22 @@ main :: IO ()
 main = do
     putStrLn "Cargando recursos..."
     
-    -- Intentamos cargar el fondo. Si falla, el programa crashea (para simplificar ahora)
-    -- IMPORTANTE: Debes tener 'background.bmp' en la carpeta donde ejecutas el juego
-    bg <- loadBMP "background.bmp"
+    -- Cargamos ambas imágenes
+    -- IMPORTANTE: Debes tener 'background.bmp' y 'main_screen.bmp' en la carpeta donde ejecutas el juego
+    startBg <- loadBMP "background.bmp"     -- Fondo de pantalla de inicio
+    menuBg  <- loadBMP "main_screen.bmp"    -- Fondo del menú principal
     
     putStrLn "Iniciando Ventana..."
     
     -- Configuración de la ventana
-    let window = InWindow "Pokemonad P2P" (800, 600) (100, 100)
+    let window = InWindow "Pokemonad P2P" (1280, 720) (100, 100)
     
     -- Iniciamos el loop del juego
     play 
-        window              -- Configuración ventana
-        black               -- Color de fondo base (detrás de la imagen)
-        30                  -- FPS (cuadros por segundo)
-        (initialState bg)   -- Estado inicial
-        draw                -- Función de dibujo
-        handleInput         -- Función de eventos
-        update              -- Función de tiempo
+        window                      -- Configuración ventana
+        black                       -- Color de fondo base (detrás de la imagen)
+        30                          -- FPS (cuadros por segundo)
+        (initialState startBg menuBg)  -- Estado inicial con ambas imágenes
+        draw                        -- Función de dibujo
+        handleInput                 -- Función de eventos
+        update                      -- Función de tiempo
