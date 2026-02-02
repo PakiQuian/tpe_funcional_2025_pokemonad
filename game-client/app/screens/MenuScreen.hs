@@ -1,47 +1,56 @@
 module Screens.MenuScreen (drawMenuScreen) where
 
 import Graphics.Gloss
+import Engine.Common (pokemonBlue, pokemonYellow, drawLogo)
 
--- Las opciones del menú en texto
+-- Las opciones del menú
 menuOptions :: [String]
 menuOptions = 
-    [ "1. Ver Pokedex"
-    , "2. Conectar P2P"
-    , "3. Jugar vs AI"
+    [ "POKEDEX"
+    , "P2P CONNECT"
+    , "SINGLE PLAYER"
     ]
 
--- Dibuja la pantalla del menú principal
-drawMenuScreen :: Picture -> Int -> Picture
-drawMenuScreen menuBgImage selection = pictures 
-    [ menuBgImage       -- 1. Dibujamos el fondo del menú
-    , drawMenu selection -- 2. Dibujamos el menú encima
+-- Dibuja la pantalla completa
+-- Recibe: Fondo (Picture) -> Logo (Picture) -> Selección (Int) -> Resultado
+drawMenuScreen :: Picture -> Picture -> Int -> Picture
+drawMenuScreen menuBgImage logoImage selection = pictures 
+    [ menuBgImage             -- 1. Fondo (Wallpaper)
+    , drawLogo logoImage      -- 2. Logo del juego
+    , drawMenuBox selection   -- 3. Caja del menú y opciones
     ]
 
--- Función auxiliar para dibujar el menú centrado
-drawMenu :: Int -> Picture
-drawMenu selection = pictures (title : options)
-  where
-    -- Título del juego
-    title = translate (-200) 200 
-          $ scale 0.5 0.5 
-          $ color yellow 
-          $ text "POKEMONAD HASKELL"
+-- Contenedor principal del menú
+drawMenuBox :: Int -> Picture
+drawMenuBox selection = translate 0 (-100) $ pictures
+    [ -- Caja de fondo del menú (Estilo GameBoy)
+      color white       $ rectangleSolid 520 270       -- Borde Blanco
+    , color pokemonBlue $ rectangleSolid 500 250       -- Fondo Azul
+    , translate (-200) 50 $ pictures (zipWith (drawOption selection) [0..] menuOptions)
+    ]
 
-    -- Generar la lista de opciones visuales
-    options = zipWith (drawOption selection) [0..] menuOptions
-
--- Dibuja una opción individual. Si está seleccionada, la pone roja y grande.
+-- Dibuja una sola opción (Texto + Cursor)
 drawOption :: Int -> Int -> String -> Picture
 drawOption currentSelection index label = 
     let 
         isSelected = currentSelection == index
-        yPosition  = fromIntegral (50 - (index * 60)) -- Separación vertical
-        col        = if isSelected then red else white
-        scl        = if isSelected then 0.3 else 0.2
-        -- Agregamos una "flecha" o pokebola si está seleccionado
-        prefix     = if isSelected then ">> " else "" 
+        yPos = fromIntegral index * (-60)
+        
+        -- Estilo del texto
+        txtColor = if isSelected then white else makeColorI 180 180 180 255
+        txtScale = 0.25
+        
+        -- El texto renderizado
+        txtItem = translate 40 yPos 
+                $ scale txtScale txtScale 
+                $ color txtColor 
+                $ text label
+        
+        -- El cursor (triángulo ►) clásico de RPG
+        cursor = if isSelected 
+                 then translate 10 (yPos + 10) 
+                      $ color pokemonYellow 
+                      $ polygon [(0,0), (0, 20), (15, 10)] -- Triángulo
+                 else blank
     in
-        translate (-150) yPosition 
-        $ scale scl scl 
-        $ color col 
-        $ text (prefix ++ label)
+        pictures [cursor, txtItem]

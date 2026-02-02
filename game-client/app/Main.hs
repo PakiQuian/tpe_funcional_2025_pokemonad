@@ -10,18 +10,21 @@ import Engine.Keys (handleInput, Screen(..), GameState(..))
 import Screens.StartScreen (drawStartScreen)
 import Screens.MenuScreen (drawMenuScreen)
 import Screens.PokedexScreen (drawPokedexScreen)
+import Screens.PokemonScreen (drawPokemonScreen)
 import Screens.MultiplayerScreen (drawMultiplayerScreen)
 import Screens.AIScreen (drawAIScreen)
 
 -- 1. MODELO DE DATOS (ESTADO)
 --------------------------------------------------------------------------------
 -- Estado inicial: Pantalla de inicio, opción 0, y las imágenes cargadas
-initialState :: Picture -> Picture -> GameState
-initialState startBg menuBg = GameState
+initialState :: Picture -> Picture -> Picture -> GameState
+initialState startBg menuBg logo = GameState
     { currentScreen = StartScreen
     , selectedOption = 0
+    , selectedPokemon = 1
     , startBgImage = startBg
     , menuBgImage = menuBg
+    , logoImage = logo
     }
 
 -- 2. VISTA (RENDER)
@@ -30,8 +33,9 @@ initialState startBg menuBg = GameState
 draw :: GameState -> Picture
 draw state = case currentScreen state of
     StartScreen -> drawStartScreen (startBgImage state)
-    Menu        -> drawMenuScreen (menuBgImage state) (selectedOption state)
-    Pokedex     -> drawPokedexScreen
+    Menu        -> drawMenuScreen (menuBgImage state) (logoImage state) (selectedOption state)
+    Pokedex     -> drawPokedexScreen (menuBgImage state) (logoImage state) (selectedPokemon state)
+    PokemonDetail -> drawPokemonScreen (menuBgImage state) (logoImage state) (selectedPokemon state)
     Multiplayer -> drawMultiplayerScreen
     PlayingAI   -> drawAIScreen
 
@@ -47,9 +51,10 @@ main :: IO ()
 main = do
     putStrLn "Cargando recursos..."
     
-    -- Cargamos ambas imágenes
-    startBg <- loadBMP "background.bmp"     -- Fondo de pantalla de inicio
-    menuBg  <- loadBMP "main_screen.bmp"    -- Fondo del menú principal
+    -- Cargamos las imágenes
+    startBg <- loadBMP "game-client/assets/images/background.bmp"     -- Fondo de pantalla de inicio
+    menuBg  <- loadBMP "game-client/assets/images/main_screen.bmp"    -- Fondo del menú principal
+    logo    <- loadBMP "game-client/assets/images/logo.bmp"           -- Logo del juego
     
     putStrLn "Iniciando Ventana..."
     
@@ -58,10 +63,10 @@ main = do
     
     -- Iniciamos el loop del juego
     play 
-        window                         -- Configuración ventana
-        black                          -- Color de fondo base
-        30                             -- FPS (cuadros por segundo)
-        (initialState startBg menuBg)  -- Estado inicial con ambas imágenes
-        draw                           -- Función de dibujo
-        handleInput                    -- Función de eventos (desde Keys module)
-        update                         -- Función de tiempo
+        window                              -- Configuración ventana
+        black                               -- Color de fondo base
+        30                                  -- FPS (cuadros por segundo)
+        (initialState startBg menuBg logo)  -- Estado inicial con todas las imágenes
+        draw                                -- Función de dibujo
+        handleInput                         -- Función de eventos (desde Keys module)
+        update                              -- Función de tiempo
