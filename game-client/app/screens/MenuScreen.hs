@@ -48,7 +48,7 @@ drawOption currentSelection index label =
         
         -- El cursor (triángulo ►) clásico de RPG
         cursor = if isSelected 
-                 then translate 10 (yPos + 10) 
+                 then translate 10 (yPos + 3) 
                       $ color pokemonYellow 
                       $ polygon [(0,0), (0, 20), (15, 10)] -- Triángulo
                  else blank

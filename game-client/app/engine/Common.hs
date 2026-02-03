@@ -3,6 +3,7 @@ module Engine.Common
     , pokemonYellow
     , drawLogo
     , drawCenteredText
+    , drawTextWithShadow
     , loadPngSafe
     ) where
 
@@ -21,23 +22,31 @@ pokemonYellow = makeColorI 255 200 0 255
 drawLogo :: Picture -> Picture
 drawLogo logo = translate 0 250 $ scale 0.8 0.8 logo
 
--- FUNCIÓN GENÉRICA PARA TEXTO CENTRADO
--- Recibe: Texto -> Escala -> Posición Y -> Color -> Resultado
-drawCenteredText :: String -> Float -> Float -> Color -> Picture
-drawCenteredText content scl yPos col =
+drawTextWithShadow :: String -> Float -> Float -> Color -> Picture
+drawTextWithShadow content scl yPos col =
     let
-        -- Estimación del ancho de caracter en la fuente por defecto de Gloss
-        -- Ajusta este número (55) si sientes que no centra perfecto con tu resolución
-        charWidth = 55 
+        charWidth = 78 
         
-        -- Cálculo matemático del centro
         totalWidth = fromIntegral (length content) * charWidth * scl
         xOffset    = -totalWidth / 2
+        
+        -- Configuración del texto base
+        textPic c = translate xOffset yPos 
+                  $ scale scl scl 
+                  $ color c 
+                  $ text content
     in
-        translate xOffset yPos 
-        $ scale scl scl 
-        $ color col 
-        $ text content
+        pictures 
+            [ translate 2 (-2) (textPic black) -- Sombra
+            , textPic col                      -- Texto real
+            ]
+            
+-- Mantenemos esta por compatibilidad, usando la misma lógica
+drawCenteredText :: String -> Float -> Float -> Color -> Picture
+drawCenteredText content scl yPos col = 
+    let charWidth = 78
+        xOffset = - (fromIntegral (length content) * charWidth * scl) / 2
+    in translate xOffset yPos $ scale scl scl $ color col $ text content
 
 loadPngSafe :: FilePath -> IO Picture
 loadPngSafe path = do

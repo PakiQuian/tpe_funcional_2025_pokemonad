@@ -1,7 +1,7 @@
 module Screens.PokedexScreen (drawPokedexScreen) where
 
 import Graphics.Gloss
-import Engine.Common (pokemonBlue, pokemonYellow, drawLogo, drawCenteredText)
+import Engine.Common (pokemonBlue, pokemonYellow, drawLogo, drawCenteredText, drawTextWithShadow)
 import Game.Pokemon (allPokemon, Pokemon(..))
 
 -- Dibuja la pantalla de Pokedex
@@ -76,7 +76,7 @@ drawScrollingList selectedId = pictures (zipWith drawEntry visiblePokemon [0..])
             
             -- Triangulito ►
             cursor = if isSelected 
-                     then translate (-155) (yPos + 5) 
+                     then translate (-155) (yPos + 1) 
                           $ color pokemonYellow 
                           $ polygon [(0,0), (0, 10), (8, 5)]
                      else blank
@@ -103,9 +103,15 @@ formatNumber n
     | otherwise = show n
 
 drawInstructions :: Picture
-drawInstructions =
-    drawCenteredText 
+drawInstructions = pictures
+    [ -- Fondo Negro Semitransparente
+      translate 0 (-320) 
+      $ color (makeColorI 0 0 0 200) -- Un poco más oscuro (200 alpha)
+      $ rectangleSolid 1280 50       -- Ancho completo y un poco más alto (50)
+
+    , drawTextWithShadow 
         "UP/DOWN: Navigate   |   ENTER: Detail   |   BACKSPACE: Menu" 
         0.15    
-        (-320)  
+        (-327) -- Ajuste vertical para que quede en el medio de la barra negra
         white
+    ]
