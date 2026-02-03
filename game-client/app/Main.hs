@@ -44,7 +44,8 @@ draw state = case currentScreen state of
         let maybeSprite = Map.lookup (selectedPokemon state) (pokemonSprites state)
         in drawPokedexScreen (menuBgImage state) (logoImage state) (selectedPokemon state) maybeSprite
     PokemonDetail -> 
-        drawPokemonScreen (menuBgImage state) (logoImage state) (selectedPokemon state)
+        let maybeSprite = Map.lookup (selectedPokemon state) (pokemonSprites state)
+        in drawPokemonScreen (menuBgImage state) (logoImage state) (selectedPokemon state) maybeSprite
     Multiplayer -> drawMultiplayerScreen
     PlayingAI   -> drawAIScreen
 
