@@ -2,30 +2,35 @@ module Main where
 
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Pure.Game
+import qualified Data.Map as Map
 
 -- Importar tipos y control de teclas desde el engine
 import Engine.Keys (handleInput, Screen(..), GameState(..))
 
--- Importar módulos de pantallas
+-- Importar recursos y lógica
+import Engine.Common (loadPngSafe)
+import Game.Pokemon (allPokemon, Pokemon(..))
+
+-- Importar pantallas
 import Screens.StartScreen (drawStartScreen)
 import Screens.MenuScreen (drawMenuScreen)
 import Screens.PokedexScreen (drawPokedexScreen)
 import Screens.PokemonScreen (drawPokemonScreen)
 import Screens.MultiplayerScreen (drawMultiplayerScreen)
 import Screens.AIScreen (drawAIScreen)
-import Engine.Common (loadPngSafe)
 
 -- 1. MODELO DE DATOS (ESTADO)
 --------------------------------------------------------------------------------
 -- Estado inicial: Pantalla de inicio, opción 0, y las imágenes cargadas
-initialState :: Picture -> Picture -> Picture -> GameState
-initialState startBg menuBg logo = GameState
+initialState :: Picture -> Picture -> Picture -> Map.Map Int Picture -> GameState
+initialState startBg menuBg logo sprites = GameState
     { currentScreen = StartScreen
     , selectedOption = 0
     , selectedPokemon = 1
     , startBgImage = startBg
     , menuBgImage = menuBg
     , logoImage = logo
+    , pokemonSprites = sprites
     }
 
 -- 2. VISTA (RENDER)
@@ -35,13 +40,15 @@ draw :: GameState -> Picture
 draw state = case currentScreen state of
     StartScreen -> drawStartScreen (startBgImage state)
     Menu        -> drawMenuScreen (menuBgImage state) (logoImage state) (selectedOption state)
-    Pokedex     -> drawPokedexScreen (menuBgImage state) (logoImage state) (selectedPokemon state)
-    PokemonDetail -> drawPokemonScreen (menuBgImage state) (logoImage state) (selectedPokemon state)
+    Pokedex -> 
+        let maybeSprite = Map.lookup (selectedPokemon state) (pokemonSprites state)
+        in drawPokedexScreen (menuBgImage state) (logoImage state) (selectedPokemon state) maybeSprite
+    PokemonDetail -> 
+        drawPokemonScreen (menuBgImage state) (logoImage state) (selectedPokemon state)
     Multiplayer -> drawMultiplayerScreen
     PlayingAI   -> drawAIScreen
 
--- 3. LOGICA DE TIEMPO (STEP)
--- Se ejecuta X veces por segundo. Por ahora no hace nada.
+-- 3. LOGICA DE TIEMPO
 --------------------------------------------------------------------------------
 update :: Float -> GameState -> GameState
 update _ state = state
@@ -50,24 +57,42 @@ update _ state = state
 --------------------------------------------------------------------------------
 main :: IO ()
 main = do
-    putStrLn "Cargando recursos..."
+    putStrLn "=== POKEMONAD INIT ==="
     
-    -- Cargamos las imágenes
+    -- 1. Cargar Fondos (Imágenes estáticas)
+    putStrLn "Cargando interfaces..."
     startBg <- loadBMP "game-client/assets/images/background.bmp"     -- Fondo de pantalla de inicio
     menuBg  <- loadBMP "game-client/assets/images/main_screen.bmp"    -- Fondo del menú principal
     logo    <- loadBMP "game-client/assets/images/logo.bmp"
     
+    -- 2. Cargar Sprites de Pokemon (Dinámico)
+    putStrLn "Cargando Pokedex..."
+    spriteList <- loadPokemonSprites allPokemon
+    let spriteMap = Map.fromList spriteList
+    
+    putStrLn $ "Se cargaron " ++ show (length spriteList) ++ " pokemons."
     putStrLn "Iniciando Ventana..."
     
-    -- Configuración de la ventana
     let window = InWindow "Pokemonad P2P" (1280, 720) (100, 100)
     
-    -- Iniciamos el loop del juego
     play 
-        window                              -- Configuración ventana
-        black                               -- Color de fondo base
-        30                                  -- FPS (cuadros por segundo)
-        (initialState startBg menuBg logo)  -- Estado inicial con todas las imágenes
-        draw                                -- Función de dibujo
-        handleInput                         -- Función de eventos (desde Keys module)
-        update                              -- Función de tiempo
+        window 
+        black 
+        30 
+        (initialState startBg menuBg logo spriteMap)
+        draw 
+        handleInput 
+        update
+
+-- HELPER: Carga masiva de sprites
+loadPokemonSprites :: [Pokemon] -> IO [(Int, Picture)]
+loadPokemonSprites [] = return []
+loadPokemonSprites (p:ps) = do
+    -- Cargamos la imagen del pokemon actual
+    pic <- loadPngSafe (frontSprite p)
+    
+    -- Cargamos el resto recursivamente
+    rest <- loadPokemonSprites ps
+    
+    -- Devolvemos la tupla (ID, Foto)
+    return ((pId p, pic) : rest)

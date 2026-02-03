@@ -2,76 +2,100 @@ module Screens.PokedexScreen (drawPokedexScreen) where
 
 import Graphics.Gloss
 import Engine.Common (pokemonBlue, pokemonYellow, drawLogo, drawCenteredText)
+import Game.Pokemon (allPokemon, Pokemon(..))
 
--- Lista de Pokemon (Igual que antes...)
-pokemonList :: [String]
-pokemonList = 
-    [ "BULBASAUR", "IVYSAUR", "VENUSAUR", "CHARMANDER", "CHARMELEON", "CHARIZARD"
-    , "SQUIRTLE", "WARTORTLE", "BLASTOISE", "CATERPIE", "METAPOD", "BUTTERFREE"
-    , "WEEDLE", "KAKUNA", "BEEDRILL", "PIDGEY", "PIDGEOTTO", "PIDGEOT"
-    , "RATTATA", "RATICATE"
-    ]
-
-drawPokedexScreen :: Picture -> Picture -> Int -> Picture
-drawPokedexScreen menuBgImage logoImage selectedPokemon = pictures 
+-- Dibuja la pantalla de Pokedex
+-- RECIBE: Fondo -> Logo -> Seleccion -> (NUEVO) SpriteActual -> Resultado
+drawPokedexScreen :: Picture -> Picture -> Int -> Maybe Picture -> Picture
+drawPokedexScreen menuBgImage logoImage selectedId currentSprite = pictures 
     [ menuBgImage                      
     , drawLogo logoImage               
-    , drawPokedexBox pokemonList selectedPokemon 
+    , drawPokedexBox selectedId currentSprite
     , drawInstructions                 
     ]
 
--- Contenedor principal del Pokedex (más grande que el del menú)
-drawPokedexBox :: [String] -> Int -> Picture
-drawPokedexBox pokemons selectedPokemon = translate 0 (-50) $ pictures
-    [ -- Caja de fondo del Pokedex (más grande para la lista)
+-- Contenedor principal
+drawPokedexBox :: Int -> Maybe Picture -> Picture
+drawPokedexBox selectedId maybeSprite = translate 0 (-50) $ pictures
+    [ -- Caja Blanca Grande
       color white       $ rectangleSolid 720 440
     , color pokemonBlue $ rectangleSolid 700 420
-    , drawPokemonList pokemons selectedPokemon
+    
+    -- SEPARADOR VERTICAL (Linea blanca en el medio)
+    , color white $ translate 0 0 $ rectangleSolid 2 400
+
+    -- COLUMNA IZQUIERDA: Lista Scrollable
+    , translate (-170) 0 $ drawScrollingList selectedId
+    
+    -- COLUMNA DERECHA: Sprite del Pokemon
+    , translate 170 0 $ drawPokemonDisplay maybeSprite
     ]
 
--- Dibuja la lista de Pokemon en 2 columnas
-drawPokemonList :: [String] -> Int -> Picture
-drawPokemonList pokemons selectedPokemon = 
-    let 
-        leftColumn  = take 10 pokemons
-        rightColumn = drop 10 pokemons
-        
-        leftPics  = zipWith (drawPokemonEntry selectedPokemon (-280)) [1..] leftColumn
-        rightPics = zipWith (drawPokemonEntry selectedPokemon 50) [11..] rightColumn
-    in
-        pictures (leftPics ++ rightPics)
+-- Dibuja la lista con lógica de "Ventana Deslizante" (Scroll)
+drawScrollingList :: Int -> Picture
+drawScrollingList selectedId = pictures (zipWith drawEntry visiblePokemon [0..])
+  where
+    -- CONFIGURACION DEL SCROLL
+    maxItems = 10 -- Cuantos pokemons se ven al mismo tiempo
+    
+    -- El índice real en la lista (restando 1 porque pId empieza en 1)
+    selIndex = max 0 (selectedId - 1)
+    
+    -- Calculamos donde empieza la ventana para que el seleccionado quede al medio
+    -- Si selecciono el 5, start=0. Si selecciono el 15, start=10.
+    scrollOffset = max 0 (selIndex - (maxItems `div` 2))
+    
+    -- Recortamos la lista completa 'allPokemon'
+    visiblePokemon = take maxItems $ drop scrollOffset allPokemon
 
--- Dibuja una entrada de Pokemon (Número + Nombre + Cursor)
-drawPokemonEntry :: Int -> Float -> Int -> String -> Picture
-drawPokemonEntry selectedPokemon xOffset index name =
-    let 
-        yPos = 160 - fromIntegral ((index - 1) `mod` 10) * 35
-        isSelected = selectedPokemon == index
-        numColor = pokemonYellow
-        nameColor = if isSelected then white else makeColorI 180 180 180 255
-        
-        -- Número del Pokemon (ej: "#001")
-        pokemonNum = translate xOffset yPos 
+    -- DIBUJAR UN RENGLÓN
+    drawEntry :: Pokemon -> Int -> Picture
+    drawEntry p offset = 
+        let 
+            -- Es este el seleccionado?
+            isSelected = pId p == selectedId
+            
+            -- Posición Y relativa (va bajando)
+            yPos = 160 - (fromIntegral offset * 35)
+            
+            -- Colores
+            nameColor = if isSelected then white else makeColorI 180 180 180 255
+            numColor  = pokemonYellow
+            
+            -- Texto "#001"
+            txtNum = translate (-140) yPos 
                    $ scale 0.12 0.12 
                    $ color numColor 
-                   $ text ("#" ++ formatNumber index)
-        
-        -- Nombre del Pokemon
-        pokemonName = translate (xOffset + 40) yPos
-                    $ scale 0.12 0.12
-                    $ color nameColor
-                    $ text name
-        
-        -- Cursor (triángulo ►) cuando está seleccionado
-        cursor = if isSelected 
-                 then translate (xOffset - 15) (yPos + 5) 
-                      $ color pokemonYellow 
-                      $ polygon [(0,0), (0, 10), (8, 5)]
-                 else blank
-    in
-        pictures [cursor, pokemonNum, pokemonName]
+                   $ text ("#" ++ formatNumber (pId p))
+            
+            -- Texto "BULBASAUR"
+            txtName = translate (-90) yPos 
+                    $ scale 0.12 0.12 
+                    $ color nameColor 
+                    $ text (pName p)
+            
+            -- Triangulito ►
+            cursor = if isSelected 
+                     then translate (-155) (yPos + 5) 
+                          $ color pokemonYellow 
+                          $ polygon [(0,0), (0, 10), (8, 5)]
+                     else blank
+        in
+            pictures [cursor, txtNum, txtName]
 
--- Formatea el número con ceros (ej: 1 -> "001")
+-- Dibuja la imagen a la derecha
+drawPokemonDisplay :: Maybe Picture -> Picture
+drawPokemonDisplay Nothing = 
+    -- Si no hay imagen, un signo de pregunta
+    pictures 
+        [ color (makeColorI 0 0 0 100) $ circleSolid 70
+        , color white $ scale 0.2 0.2 $ translate (-20) (-20) $ text "?"
+        ]
+drawPokemonDisplay (Just pic) = 
+    -- Escalamos la imagen porque los sprites son chiquitos (64x64)
+    scale 3.5 3.5 pic
+
+-- Helpers
 formatNumber :: Int -> String
 formatNumber n
     | n < 10    = "00" ++ show n
@@ -81,7 +105,7 @@ formatNumber n
 drawInstructions :: Picture
 drawInstructions =
     drawCenteredText 
-        "UP/DOWN: Navigate   |   ENTER: Stats   |   BACKSPACE: Menu" 
-        0.15    -- Escala
-        (-320)  -- Posición Y
-        white   -- Color
+        "UP/DOWN: Navigate   |   ENTER: Detail   |   BACKSPACE: Menu" 
+        0.15    
+        (-320)  
+        white

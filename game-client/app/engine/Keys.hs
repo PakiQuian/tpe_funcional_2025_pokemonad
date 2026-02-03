@@ -6,6 +6,7 @@ module Engine.Keys
 
 import Graphics.Gloss (Picture)
 import Graphics.Gloss.Interface.Pure.Game
+import qualified Data.Map as Map
 
 -- TIPOS DE DATOS
 --------------------------------------------------------------------------------
@@ -19,6 +20,7 @@ data GameState = GameState
     , startBgImage    :: Picture
     , menuBgImage     :: Picture
     , logoImage       :: Picture
+    , pokemonSprites  :: Map.Map Int Picture
     }
 
 -- CONTROLADOR (INPUTS)
