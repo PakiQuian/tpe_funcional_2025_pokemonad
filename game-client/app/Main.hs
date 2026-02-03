@@ -13,6 +13,7 @@ import Screens.PokedexScreen (drawPokedexScreen)
 import Screens.PokemonScreen (drawPokemonScreen)
 import Screens.MultiplayerScreen (drawMultiplayerScreen)
 import Screens.AIScreen (drawAIScreen)
+import Engine.Common (loadPngSafe)
 
 -- 1. MODELO DE DATOS (ESTADO)
 --------------------------------------------------------------------------------
@@ -54,7 +55,7 @@ main = do
     -- Cargamos las imágenes
     startBg <- loadBMP "game-client/assets/images/background.bmp"     -- Fondo de pantalla de inicio
     menuBg  <- loadBMP "game-client/assets/images/main_screen.bmp"    -- Fondo del menú principal
-    logo    <- loadBMP "game-client/assets/images/logo.bmp"           -- Logo del juego
+    logo    <- loadBMP "game-client/assets/images/logo.bmp"
     
     putStrLn "Iniciando Ventana..."
     

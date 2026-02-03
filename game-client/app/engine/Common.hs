@@ -3,9 +3,12 @@ module Engine.Common
     , pokemonYellow
     , drawLogo
     , drawCenteredText
+    , loadPngSafe
     ) where
 
 import Graphics.Gloss
+import Graphics.Gloss.Juicy (loadJuicyPNG)
+import Data.Maybe (fromMaybe)
 
 -- COLORES PERSONALIZADOS
 pokemonBlue :: Color
@@ -35,3 +38,16 @@ drawCenteredText content scl yPos col =
         $ scale scl scl 
         $ color col 
         $ text content
+
+loadPngSafe :: FilePath -> IO Picture
+loadPngSafe path = do
+    maybePic <- loadJuicyPNG path
+    case maybePic of
+        Just pic -> return pic
+        Nothing  -> do
+            putStrLn $ "WARNING: No se pudo cargar la imagen: " ++ path
+            -- Devolvemos un placeholder rojo con texto "ERR"
+            return $ pictures 
+                [ color red $ rectangleSolid 50 50
+                , color white $ scale 0.1 0.1 $ translate (-200) 0 $ text "ERR" 
+                ]
