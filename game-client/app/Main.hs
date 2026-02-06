@@ -9,6 +9,7 @@ import Engine.Keys (handleInput, Screen(..), GameState(..))
 
 import Engine.Common (loadPngSafe)
 import Game.Pokemon (allPokemon, Pokemon(..))
+import Game.Trainer (allTrainers, Trainer(..))
 
 import Screens.StartScreen (drawStartScreen)
 import Screens.MenuScreen (drawMenuScreen)
@@ -21,8 +22,8 @@ import Screens.OpponentSelectScreen (drawOpponentSelectScreen)
 --------------------------------------------------------------------------------
 -- MODELO DE DATOS (ESTADO)
 --------------------------------------------------------------------------------
-initialState :: Picture -> Picture -> Picture -> Map.Map Int Picture -> StdGen -> GameState
-initialState startBg menuBg logo sprites rng = GameState
+initialState :: Picture -> Picture -> Picture -> Map.Map Int Picture -> Map.Map Int Picture -> StdGen -> GameState
+initialState startBg menuBg logo pokemonSprites trainerSprites rng = GameState
     { currentScreen = StartScreen
     , selectedOption = 0
     , selectedPokemon = 1
@@ -32,7 +33,8 @@ initialState startBg menuBg logo sprites rng = GameState
     , startBgImage = startBg
     , menuBgImage = menuBg
     , logoImage = logo
-    , pokemonSprites = sprites
+    , pokemonSprites = pokemonSprites
+    , trainerSprites = trainerSprites
     , rngSeed = rng
     }
 
@@ -51,7 +53,7 @@ draw state = case currentScreen state of
         in drawPokemonScreen (menuBgImage state) (logoImage state) (selectedPokemon state) maybeSprite
     Multiplayer -> drawMultiplayerScreen
     TeamSelect  -> drawTeamSelectScreen (menuBgImage state) (logoImage state) (selectedPokemon state) (playerTeam state) (pokemonSprites state)
-    OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state)
+    OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state) (pokemonSprites state) (trainerSprites state)
 
 --------------------------------------------------------------------------------
 -- LOGICA DE TIEMPO
@@ -74,10 +76,17 @@ main = do
     
     -- 2. Cargar Sprites de Pokemon (Dinámico)
     putStrLn "Cargando Pokedex..."
-    spriteList <- loadPokemonSprites allPokemon
-    let spriteMap = Map.fromList spriteList
+    pokemonSpriteList <- loadPokemonSprites allPokemon
+    let pokemonSpriteMap = Map.fromList pokemonSpriteList
     
-    putStrLn $ "Se cargaron " ++ show (length spriteList) ++ " pokemons."
+    putStrLn $ "Se cargaron " ++ show (length pokemonSpriteList) ++ " pokemons."
+    
+    -- 3. Cargar Sprites de Trainers
+    putStrLn "Cargando Entrenadores..."
+    trainerSpriteList <- loadTrainerSprites allTrainers
+    let trainerSpriteMap = Map.fromList trainerSpriteList
+    
+    putStrLn $ "Se cargaron " ++ show (length trainerSpriteList) ++ " entrenadores."
     
     rng <- getStdGen
     
@@ -89,7 +98,7 @@ main = do
         window 
         black 
         30 
-        (initialState startBg menuBg logo spriteMap rng)
+        (initialState startBg menuBg logo pokemonSpriteMap trainerSpriteMap rng)
         draw 
         handleInput 
         update
@@ -104,3 +113,11 @@ loadPokemonSprites (p:ps) = do
     rest <- loadPokemonSprites ps
     
     return ((pId p, pic) : rest)
+
+loadTrainerSprites :: [Trainer] -> IO [(Int, Picture)]
+loadTrainerSprites [] = return []
+loadTrainerSprites (t:ts) = do
+    pic <- loadPngSafe (tSprite t)
+    rest <- loadTrainerSprites ts
+    
+    return ((tId t, pic) : rest)

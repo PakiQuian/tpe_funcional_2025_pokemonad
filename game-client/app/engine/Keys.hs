@@ -31,6 +31,7 @@ data GameState = GameState
     , menuBgImage         :: Picture
     , logoImage           :: Picture
     , pokemonSprites      :: Map.Map Int Picture
+    , trainerSprites      :: Map.Map Int Picture
     , rngSeed             :: StdGen
     }
 
