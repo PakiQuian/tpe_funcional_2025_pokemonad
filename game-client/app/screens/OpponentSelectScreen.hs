@@ -20,17 +20,17 @@ drawOpponentSelectScreen menuBgImage logoImage selectedIndex pokemonSpriteMap tr
 
 drawOpponentBox :: Int -> Map.Map Int Picture -> Map.Map Int Picture -> Picture
 drawOpponentBox selectedIndex pokemonSpriteMap trainerSpriteMap = translate 0 (-50) $ pictures
-    [ -- Caja Blanca Grande (Ahora 440 de alto, igual que las otras)
+    [ -- Caja Blanca Grande
       color white       $ rectangleSolid 720 440
     , color pokemonBlue $ rectangleSolid 700 420
     
     -- Separador Vertical
-    , color white $ translate 0 0 $ rectangleSolid 2 300
+    , color white $ translate 0 (-20) $ rectangleSolid 2 350
     
-    -- Título (Lo bajamos un poco para que entre bien en la nueva altura)
+    -- Título
     , translate 0 170 $ drawTextWithShadow "CHOOSE YOUR OPPONENT" 0.18 0 white
     
-    -- Lista de entrenadores (Izquierda - Alineada igual que Pokedex)
+    -- Lista de entrenadores (Izquierda)
     , translate (-170) 0 $ drawTrainerList selectedIndex
     
     -- Preview del entrenador (Derecha)
@@ -44,7 +44,6 @@ drawOpponentBox selectedIndex pokemonSpriteMap trainerSpriteMap = translate 0 (-
 drawTrainerList :: Int -> Picture
 drawTrainerList selectedIndex = pictures $ zipWith drawTrainerEntry visibleTrainers [0..]
   where
-    -- Lógica de Scroll simple (ventana de 8 entrenadores)
     maxItems = 8
     scrollOffset = max 0 (selectedIndex - (maxItems `div` 2))
     visibleTrainers = take maxItems $ drop scrollOffset allTrainers
@@ -52,36 +51,41 @@ drawTrainerList selectedIndex = pictures $ zipWith drawTrainerEntry visibleTrain
     drawTrainerEntry :: Trainer -> Int -> Picture
     drawTrainerEntry trainer offset = 
         let 
-            -- Calculamos si es el seleccionado real (sumando el offset)
             realIndex = scrollOffset + offset
             isSelected = realIndex == selectedIndex
             
             yPos = 120 - (fromIntegral offset * 45)
             nameColor = if isSelected then white else makeColorI 180 180 180 255
             
-            -- Nombre del entrenador
-            txtName = translate (-90) yPos -- Pegado a la izquierda del panel
+            -- 1. NOMBRE (Alineado más a la izquierda)
+            -- Antes era -90, ahora -140 para pegarlo al borde
+            txtName = translate (-140) yPos 
                     $ scale 0.15 0.15 
                     $ color nameColor 
                     $ text (tName trainer)
             
-            -- Cursor
+            -- 2. CURSOR
             cursor = if isSelected 
-                     then translate (-110) (yPos + 2) $ color pokemonYellow $ polygon [(0,0), (0, 12), (10, 6)]
+                     then translate (-160) (yPos + 2)
+                          $ color pokemonYellow 
+                          $ polygon [(0,0), (0, 12), (10, 6)]
                      else blank
             
-            -- Estrellas (Dificultad)
-            stars = translate (-90) (yPos - 15) $ scale 0.08 0.08 $ color pokemonYellow $ text (difficultyStars (tDifficulty trainer))
+            -- 3. DIFICULTAD (Estrellas)
+            stars = translate (-140) (yPos - 15) 
+                  $ scale 0.12 0.12 
+                  $ color pokemonYellow 
+                  $ text (difficultyStars (tDifficulty trainer))
         in
             pictures [cursor, txtName, stars]
 
 difficultyStars :: Float -> String
 difficultyStars diff
-    | diff >= 1.5 = "★★★★★"
-    | diff >= 1.3 = "★★★★"
-    | diff >= 1.1 = "★★★"
-    | diff >= 0.9 = "★★"
-    | otherwise   = "★"
+    | diff >= 1.5 = "*****"
+    | diff >= 1.3 = "****"
+    | diff >= 1.1 = "***"
+    | diff >= 0.9 = "**"
+    | otherwise   = "*"
 
 -- ============================================
 -- PREVIEW DEL ENTRENADOR (DERECHA)
@@ -90,21 +94,19 @@ difficultyStars diff
 drawTrainerPreview :: Trainer -> Map.Map Int Picture -> Map.Map Int Picture -> Picture
 drawTrainerPreview trainer pokemonSpriteMap trainerSpriteMap = 
     let 
-        -- Detectamos si es "Random" o un entrenador especial sin equipo definido
         isRandom = null (tTeamIds trainer)
     in 
         pictures
-        [ -- Caja contenedora de la derecha (opcional, ayuda a encuadrar)
-          -- color (makeColorI 0 0 0 50) $ rectangleSolid 300 350
-        
-          -- 1. SPRITE DEL ENTRENADOR
+        [ -- 1. SPRITE DEL ENTRENADOR
           if isRandom
-             then translate 0 0   $ drawTrainerSprite (tId trainer) trainerSpriteMap -- Centrado absoluto
-             else translate 0 70  $ drawTrainerSprite (tId trainer) trainerSpriteMap -- Arriba
+             -- Si es Random: CENTRADO ABSOLUTO en la caja derecha
+             then translate 0 0 $ drawTrainerSprite (tId trainer) trainerSpriteMap
+             -- Si es Normal: Arriba para dejar lugar al equipo
+             else translate 0 70  $ drawTrainerSprite (tId trainer) trainerSpriteMap
         
-          -- 2. NOMBRE (Solo si no es random, o ajustado)
+          -- 2. NOMBRE
         , if isRandom
-             then translate 0 (-100) $ drawCenteredText (tName trainer) 0.18 0 white -- Texto más grande y centrado abajo
+             then translate 0 (-100) $ drawCenteredText (tName trainer) 0.18 0 white
              else translate 0 0      $ drawCenteredText (tName trainer) 0.15 0 white
         
           -- 3. EQUIPO (Solo si NO es random)
@@ -117,7 +119,6 @@ drawTrainerPreview trainer pokemonSpriteMap trainerSpriteMap =
 drawTrainerSprite :: Int -> Map.Map Int Picture -> Picture
 drawTrainerSprite trainerId spriteMap = 
     case Map.lookup trainerId spriteMap of
-        -- Sprites grandes (2.5x)
         Just pic -> scale 2.5 2.5 pic 
         Nothing  -> pictures 
             [ color (makeColorI 255 255 255 50) $ circleSolid 60
@@ -139,8 +140,6 @@ drawMiniSlot spriteMap index pokemonId =
     let
         col = index `mod` 3
         row = index `div` 3
-        
-        -- Posiciones compactas
         xPos = -70 + (fromIntegral col * 70) 
         yPos = 30 - (fromIntegral row * 70)
     in
