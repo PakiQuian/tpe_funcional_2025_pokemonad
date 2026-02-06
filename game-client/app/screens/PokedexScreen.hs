@@ -5,7 +5,7 @@ import Engine.Common (pokemonBlue, pokemonYellow, drawLogo, drawCenteredText, dr
 import Game.Pokemon (allPokemon, Pokemon(..))
 
 -- Dibuja la pantalla de Pokedex
--- RECIBE: Fondo -> Logo -> Seleccion -> (NUEVO) SpriteActual -> Resultado
+-- RECIBE: Fondo -> Logo -> Seleccion -> SpriteActual -> Resultado
 drawPokedexScreen :: Picture -> Picture -> Int -> Maybe Picture -> Picture
 drawPokedexScreen menuBgImage logoImage selectedId currentSprite = pictures 
     [ menuBgImage                      

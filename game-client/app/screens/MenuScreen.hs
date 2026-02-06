@@ -23,7 +23,7 @@ drawMenuScreen menuBgImage logoImage selection = pictures
 -- Contenedor principal del menú
 drawMenuBox :: Int -> Picture
 drawMenuBox selection = translate 0 (-100) $ pictures
-    [ -- Caja de fondo del menú (Estilo GameBoy)
+    [ -- Caja de fondo del menú
       color white       $ rectangleSolid 520 270       -- Borde Blanco
     , color pokemonBlue $ rectangleSolid 500 250       -- Fondo Azul
     , translate (-200) 50 $ pictures (zipWith (drawOption selection) [0..] menuOptions)

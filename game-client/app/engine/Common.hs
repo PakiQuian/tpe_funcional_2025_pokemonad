@@ -11,14 +11,13 @@ import Graphics.Gloss
 import Graphics.Gloss.Juicy (loadJuicyPNG)
 import Data.Maybe (fromMaybe)
 
--- COLORES PERSONALIZADOS
 pokemonBlue :: Color
 pokemonBlue = makeColorI 0 50 120 255 
 
 pokemonYellow :: Color
 pokemonYellow = makeColorI 255 200 0 255
 
--- Dibuja el logo en la parte superior
+
 drawLogo :: Picture -> Picture
 drawLogo logo = translate 0 250 $ scale 0.8 0.8 logo
 
@@ -41,7 +40,6 @@ drawTextWithShadow content scl yPos col =
             , textPic col                      -- Texto real
             ]
             
--- Mantenemos esta por compatibilidad, usando la misma lógica
 drawCenteredText :: String -> Float -> Float -> Color -> Picture
 drawCenteredText content scl yPos col = 
     let charWidth = 78

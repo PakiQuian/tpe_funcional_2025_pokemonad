@@ -16,13 +16,15 @@ executable pokemonad
                       Screens.PokedexScreen,
                       Screens.PokemonScreen,
                       Screens.MultiplayerScreen,
-                      Screens.AIScreen,
+                      Screens.TeamSelectScreen,
+                      Screens.OpponentSelectScreen,
     hs-source-dirs:   app
     
     build-depends:    base >= 4.14 && < 5,
                       p2p-net,
                       game-engine,
                       containers,
+                      random >= 1.2,
                       gloss,
                       gloss-juicy,
                       text

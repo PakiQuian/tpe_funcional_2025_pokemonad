@@ -3,38 +3,41 @@ module Main where
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Pure.Game
 import qualified Data.Map as Map
+import System.Random (mkStdGen, getStdGen, StdGen)
 
--- Importar tipos y control de teclas desde el engine
 import Engine.Keys (handleInput, Screen(..), GameState(..))
 
--- Importar recursos y lógica
 import Engine.Common (loadPngSafe)
 import Game.Pokemon (allPokemon, Pokemon(..))
 
--- Importar pantallas
 import Screens.StartScreen (drawStartScreen)
 import Screens.MenuScreen (drawMenuScreen)
 import Screens.PokedexScreen (drawPokedexScreen)
 import Screens.PokemonScreen (drawPokemonScreen)
 import Screens.MultiplayerScreen (drawMultiplayerScreen)
-import Screens.AIScreen (drawAIScreen)
+import Screens.TeamSelectScreen (drawTeamSelectScreen)
+import Screens.OpponentSelectScreen (drawOpponentSelectScreen)
 
--- 1. MODELO DE DATOS (ESTADO)
 --------------------------------------------------------------------------------
--- Estado inicial: Pantalla de inicio, opción 0, y las imágenes cargadas
-initialState :: Picture -> Picture -> Picture -> Map.Map Int Picture -> GameState
-initialState startBg menuBg logo sprites = GameState
+-- MODELO DE DATOS (ESTADO)
+--------------------------------------------------------------------------------
+initialState :: Picture -> Picture -> Picture -> Map.Map Int Picture -> StdGen -> GameState
+initialState startBg menuBg logo sprites rng = GameState
     { currentScreen = StartScreen
     , selectedOption = 0
     , selectedPokemon = 1
+    , playerTeam = []
+    , selectedTrainer = Nothing
+    , selectedTrainerIndex = 0
     , startBgImage = startBg
     , menuBgImage = menuBg
     , logoImage = logo
     , pokemonSprites = sprites
+    , rngSeed = rng
     }
 
--- 2. VISTA (RENDER)
--- Esta función toma el Estado y devuelve una "Picture" (dibujo)
+--------------------------------------------------------------------------------
+-- VISTA (RENDER)
 --------------------------------------------------------------------------------
 draw :: GameState -> Picture
 draw state = case currentScreen state of
@@ -47,14 +50,17 @@ draw state = case currentScreen state of
         let maybeSprite = Map.lookup (selectedPokemon state) (pokemonSprites state)
         in drawPokemonScreen (menuBgImage state) (logoImage state) (selectedPokemon state) maybeSprite
     Multiplayer -> drawMultiplayerScreen
-    PlayingAI   -> drawAIScreen
+    TeamSelect  -> drawTeamSelectScreen (menuBgImage state) (logoImage state) (selectedPokemon state) (playerTeam state) (pokemonSprites state)
+    OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state)
 
--- 3. LOGICA DE TIEMPO
+--------------------------------------------------------------------------------
+-- LOGICA DE TIEMPO
 --------------------------------------------------------------------------------
 update :: Float -> GameState -> GameState
 update _ state = state
 
--- 4. MAIN
+--------------------------------------------------------------------------------
+-- MAIN
 --------------------------------------------------------------------------------
 main :: IO ()
 main = do
@@ -62,8 +68,8 @@ main = do
     
     -- 1. Cargar Fondos (Imágenes estáticas)
     putStrLn "Cargando interfaces..."
-    startBg <- loadBMP "game-client/assets/images/background.bmp"     -- Fondo de pantalla de inicio
-    menuBg  <- loadBMP "game-client/assets/images/main_screen.bmp"    -- Fondo del menú principal
+    startBg <- loadBMP "game-client/assets/images/background.bmp"
+    menuBg  <- loadBMP "game-client/assets/images/main_screen.bmp"
     logo    <- loadBMP "game-client/assets/images/logo.bmp"
     
     -- 2. Cargar Sprites de Pokemon (Dinámico)
@@ -72,6 +78,9 @@ main = do
     let spriteMap = Map.fromList spriteList
     
     putStrLn $ "Se cargaron " ++ show (length spriteList) ++ " pokemons."
+    
+    rng <- getStdGen
+    
     putStrLn "Iniciando Ventana..."
     
     let window = InWindow "Pokemonad P2P" (1280, 720) (100, 100)
@@ -80,20 +89,18 @@ main = do
         window 
         black 
         30 
-        (initialState startBg menuBg logo spriteMap)
+        (initialState startBg menuBg logo spriteMap rng)
         draw 
         handleInput 
         update
 
--- HELPER: Carga masiva de sprites
+--------------------------------------------------------------------------------
+-- HELPERS: Carga masiva de sprites
+--------------------------------------------------------------------------------
 loadPokemonSprites :: [Pokemon] -> IO [(Int, Picture)]
 loadPokemonSprites [] = return []
 loadPokemonSprites (p:ps) = do
-    -- Cargamos la imagen del pokemon actual
-    pic <- loadPngSafe (frontSprite p)
-    
-    -- Cargamos el resto recursivamente
+    pic <- loadPngSafe (frontSprite p)    
     rest <- loadPokemonSprites ps
     
-    -- Devolvemos la tupla (ID, Foto)
     return ((pId p, pic) : rest)
