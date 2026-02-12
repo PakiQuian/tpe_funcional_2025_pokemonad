@@ -9,10 +9,12 @@ build-type:         Simple
 library
     hs-source-dirs:   src
     
-    exposed-modules:  Game.Logic
-                      Game.FreeMonad
+    exposed-modules:  Game.AI
+                      Game.Battle
+                      Game.Engine
+                      Game.Logic
+                      Game.Move
                       Game.Pokemon
-                      Game.AI
                       Game.Trainer
 
     -- Las librerías de lógica

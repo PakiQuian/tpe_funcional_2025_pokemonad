@@ -1,6 +1,6 @@
 module Screens.StartScreen (drawStartScreen) where
 
-import Graphics.Gloss
+import Graphics.Gloss (Picture)
 
 -- Dibuja la pantalla de inicio
 drawStartScreen :: Picture -> Picture
