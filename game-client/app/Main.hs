@@ -2,7 +2,7 @@ module Main where
 
 import qualified Data.Map as Map
 import Engine.Common (loadPngSafe)
-import Engine.Keys (GameState (..), Screen (..), handleInput)
+import Engine.Keys (GameState (..), Screen (..), handleInput, handleTick)
 import Game.Pokemon (Pokemon (..), allPokemon)
 import Game.Trainer (Trainer (..), allTrainers)
 import Graphics.Gloss
@@ -50,7 +50,10 @@ initialState startBg menuBg logo pokemonFrontSprites pokemonBackSprites trainerS
       battleBackgrounds = battleBgs,
       currentBattleBg = 0,
       battleMenuIndex = 0,
-      rngSeed = rng
+      rngSeed = rng,
+      holdingUp = False,
+      holdingDown = False,
+      scrollTimer = 0.0
     }
 
 --------------------------------------------------------------------------------
@@ -75,7 +78,7 @@ draw state = case currentScreen state of
 -- LOGICA DE TIEMPO
 --------------------------------------------------------------------------------
 update :: Float -> GameState -> GameState
-update _ state = state
+update = handleTick
 
 --------------------------------------------------------------------------------
 -- MAIN

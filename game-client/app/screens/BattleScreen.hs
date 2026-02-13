@@ -126,6 +126,6 @@ drawMenuOption index label xPos yPos selectedIndex =
 
       cursor =
         if isSelected
-          then translate (xPos - 25) (yPos + 4) $ color pokemonYellow $ polygon [(0, 0), (0, 15), (12, 7.5)]
+          then translate (xPos - 25) (yPos + 3) $ color pokemonYellow $ polygon [(0, 0), (0, 15), (12, 7.5)]
           else blank
    in pictures [cursor, txt]

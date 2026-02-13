@@ -1,5 +1,6 @@
 module Engine.Keys
   ( handleInput,
+    handleTick,
     Screen (..),
     GameState (..),
   )
@@ -13,7 +14,7 @@ import Graphics.Gloss (Picture)
 import Graphics.Gloss.Interface.Pure.Game
   ( Event (EventKey),
     Key (Char, SpecialKey),
-    KeyState (Down),
+    KeyState (Down, Up),
     Picture,
     SpecialKey (KeyBackspace, KeyDelete, KeyDown, KeyEnter, KeyLeft, KeyRight, KeyUp),
   )
@@ -51,7 +52,10 @@ data GameState = GameState
     battleBackgrounds :: [Picture],
     currentBattleBg :: Int,
     battleMenuIndex :: Int,
-    rngSeed :: StdGen
+    rngSeed :: StdGen,
+    holdingUp :: Bool,
+    holdingDown :: Bool,
+    scrollTimer :: Float
   }
 
 --------------------------------------------------------------------------------
@@ -60,28 +64,14 @@ data GameState = GameState
 handleInput :: Event -> GameState -> GameState
 -- Key Up
 handleInput (EventKey (SpecialKey KeyUp) Down _ _) state =
-  case currentScreen state of
-    StartScreen -> state {currentScreen = Menu}
-    Menu -> state {selectedOption = max 0 (selectedOption state - 1)}
-    Pokedex -> state {selectedPokemon = max 1 (selectedPokemon state - 1)}
-    TeamSelect -> state {selectedPokemon = max 1 (selectedPokemon state - 1)}
-    OpponentSelect -> state {selectedTrainerIndex = max 0 (selectedTrainerIndex state - 1)}
-    BattleScreen ->
-      let c = battleMenuIndex state
-       in state {battleMenuIndex = if c >= 2 then c - 2 else c}
-    _ -> state
+  moveUp (state {holdingUp = True, scrollTimer = -0.3})
+handleInput (EventKey (SpecialKey KeyUp) Up _ _) state =
+  state {holdingUp = False}
 -- Key Down
 handleInput (EventKey (SpecialKey KeyDown) Down _ _) state =
-  case currentScreen state of
-    StartScreen -> state {currentScreen = Menu}
-    Menu -> state {selectedOption = min 2 (selectedOption state + 1)}
-    Pokedex -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
-    TeamSelect -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
-    OpponentSelect -> state {selectedTrainerIndex = min (length allTrainers - 1) (selectedTrainerIndex state + 1)}
-    BattleScreen ->
-      let c = battleMenuIndex state
-       in state {battleMenuIndex = if c <= 1 then c + 2 else c}
-    _ -> state
+  moveDown (state {holdingDown = True, scrollTimer = -0.3})
+handleInput (EventKey (SpecialKey KeyDown) Up _ _) state =
+  state {holdingDown = False}
 -- Key Left
 handleInput (EventKey (SpecialKey KeyLeft) Down _ _) state =
   case currentScreen state of
@@ -142,6 +132,50 @@ handleInput (EventKey _ Down _ _) state =
     StartScreen -> state {currentScreen = Menu}
     _ -> state
 handleInput _ state = state
+
+--------------------------------------------------------------------------------
+-- LOGICA DE SCROLL CONTINUO (TICK)
+--------------------------------------------------------------------------------
+
+handleTick :: Float -> GameState -> GameState
+handleTick dt state =
+  let -- Velocidad de scroll continuo (0.05 segundos = 20 pokemons por segundo)
+      scrollSpeed = 0.05
+      newTimer = scrollTimer state + dt
+   in if holdingUp state && newTimer >= scrollSpeed
+        then moveUp (state {scrollTimer = 0}) -- Scrollea y resetea timer a 0
+        else
+          if holdingDown state && newTimer >= scrollSpeed
+            then moveDown (state {scrollTimer = 0}) -- Scrollea y resetea timer a 0
+            else state {scrollTimer = newTimer} -- Solo suma tiempo
+
+--------------------------------------------------------------------------------
+-- FUNCIONES DE MOVIMIENTO EXTRAIDAS
+--------------------------------------------------------------------------------
+
+moveUp :: GameState -> GameState
+moveUp state = case currentScreen state of
+  StartScreen -> state {currentScreen = Menu}
+  Menu -> state {selectedOption = max 0 (selectedOption state - 1)}
+  Pokedex -> state {selectedPokemon = max 1 (selectedPokemon state - 1)}
+  TeamSelect -> state {selectedPokemon = max 1 (selectedPokemon state - 1)}
+  OpponentSelect -> state {selectedTrainerIndex = max 0 (selectedTrainerIndex state - 1)}
+  BattleScreen ->
+    let c = battleMenuIndex state
+     in state {battleMenuIndex = if c >= 2 then c - 2 else c}
+  _ -> state
+
+moveDown :: GameState -> GameState
+moveDown state = case currentScreen state of
+  StartScreen -> state {currentScreen = Menu}
+  Menu -> state {selectedOption = min 2 (selectedOption state + 1)}
+  Pokedex -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
+  TeamSelect -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
+  OpponentSelect -> state {selectedTrainerIndex = min (length allTrainers - 1) (selectedTrainerIndex state + 1)}
+  BattleScreen ->
+    let c = battleMenuIndex state
+     in state {battleMenuIndex = if c <= 1 then c + 2 else c}
+  _ -> state
 
 --------------------------------------------------------------------------------
 -- FUNCIONES AUXILIARES
