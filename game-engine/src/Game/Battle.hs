@@ -1,8 +1,9 @@
 module Game.Battle where
 
 import Game.Move (Move (..), getMoveByName)
-import Game.Pokemon (Pokemon (..), PokemonType (..), Stats (..), getPokemonById)
+import Game.Pokemon (Pokemon (..), getPokemonById)
 import Game.Trainer (Trainer (..))
+import Game.Types (PokemonType (..), Stats (..))
 
 -- ==========================================
 -- 1. POKEMON DE BATALLA (Dinámico)
@@ -40,7 +41,7 @@ data BattleState = BattleState
     enemyBench :: [BattlePokemon],
     turnCount :: Int,
     phase :: BattlePhase,
-    battleLog :: [String] -- Historial de textos para mostrar en pantalla
+    battleLog :: [String]
   }
   deriving (Show, Eq)
 

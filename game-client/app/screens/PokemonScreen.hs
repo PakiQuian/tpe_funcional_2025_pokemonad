@@ -2,7 +2,8 @@ module Screens.PokemonScreen (drawPokemonScreen) where
 
 import Data.List (intercalate)
 import Engine.Common (drawLogo, drawTextWithShadow, pokemonBlue, pokemonYellow)
-import Game.Pokemon (Pokemon (..), PokemonType (..), Stats (..), getPokemonById)
+import Game.Pokemon (Pokemon (..), getPokemonById)
+import Game.Types (PokemonType (..), Stats (..))
 import Graphics.Gloss
   ( Picture,
     circleSolid,

@@ -16,6 +16,7 @@ library
                       Game.Move
                       Game.Pokemon
                       Game.Trainer
+                      Game.Types
 
     -- Las librerías de lógica
     build-depends:    base >= 4.14 && < 5,

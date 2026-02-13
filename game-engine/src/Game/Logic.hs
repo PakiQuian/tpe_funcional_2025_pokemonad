@@ -1,7 +1,8 @@
 module Game.Logic where
 
 import Game.Move (Move (..), MoveCategory (..))
-import Game.Pokemon (Pokemon (..), PokemonType (..), Stats (..))
+import Game.Pokemon (Pokemon (..))
+import Game.Types (PokemonType (..), Stats (..))
 
 -- Tabla de Efectividad (Simplificada para empezar)
 -- Devuelve multiplicador: 2.0 (Super Effective), 0.5 (Not Very), 1.0 (Normal), 0.0 (Immune)
