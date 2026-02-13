@@ -11,6 +11,7 @@ import Graphics.Gloss
     color,
     makeColorI,
     pictures,
+    polygon,
     rectangleSolid,
     rectangleWire,
     scale,
@@ -20,8 +21,8 @@ import Graphics.Gloss
   )
 
 -- Dibuja la pantalla de batalla
-drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map Int Picture -> Map.Map Int Picture -> Picture
-drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackSprites =
+drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map Int Picture -> Map.Map Int Picture -> Int -> Picture
+drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackSprites menuIndex =
   let bg =
         if null backgrounds
           then blank
@@ -33,7 +34,7 @@ drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackS
             [ bg,
               drawEnemyUnit (enemyActive state) pokemonFrontSprites,
               drawPlayerUnit (playerActive state) pokemonBackSprites,
-              drawBattleMenu
+              drawBattleMenu (playerActive state) menuIndex
             ]
 
 -- ===============================================================
@@ -94,12 +95,37 @@ drawHUD bp isPlayer =
 -- MENÚ DE BATALLA (Abajo)
 -- ===============================================================
 
-drawBattleMenu :: Picture
-drawBattleMenu =
+drawBattleMenu :: BattlePokemon -> Int -> Picture
+drawBattleMenu activePokemon menuIndex =
   translate 0 (-280) $
     pictures
       [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
         color white $ rectangleWire 1270 150,
-        translate (-500) 20 $ scale 0.2 0.2 $ color white $ text "What will POKEMON do?"
-        -- Aquí agregaremos botones después: FIGHT, BAG, POKEMON, RUN
+        translate (-580) 20 $
+          scale 0.25 0.25 $
+            color white $
+              text ("What will " ++ pName (bpOriginal activePokemon) ++ " do?"),
+        translate 350 0 $ drawOptionsGrid menuIndex
       ]
+
+drawOptionsGrid :: Int -> Picture
+drawOptionsGrid menuIndex =
+  pictures
+    [ drawMenuOption 0 "FIGHT" (-150) 25 menuIndex,
+      drawMenuOption 1 "BAG" 80 25 menuIndex,
+      drawMenuOption 2 "POKEMON" (-150) (-35) menuIndex,
+      drawMenuOption 3 "QUIT" 80 (-35) menuIndex
+    ]
+
+drawMenuOption :: Int -> String -> Float -> Float -> Int -> Picture
+drawMenuOption index label xPos yPos selectedIndex =
+  let isSelected = index == selectedIndex
+      txtColor = if isSelected then white else makeColorI 180 180 180 255
+
+      txt = translate xPos yPos $ scale 0.2 0.2 $ color txtColor $ text label
+
+      cursor =
+        if isSelected
+          then translate (xPos - 25) (yPos + 4) $ color pokemonYellow $ polygon [(0, 0), (0, 15), (12, 7.5)]
+          else blank
+   in pictures [cursor, txt]

@@ -15,7 +15,7 @@ import Graphics.Gloss.Interface.Pure.Game
     Key (Char, SpecialKey),
     KeyState (Down),
     Picture,
-    SpecialKey (KeyBackspace, KeyDelete, KeyDown, KeyEnter, KeyUp),
+    SpecialKey (KeyBackspace, KeyDelete, KeyDown, KeyEnter, KeyLeft, KeyRight, KeyUp),
   )
 import System.Random (StdGen, randomR)
 
@@ -50,6 +50,7 @@ data GameState = GameState
     battleState :: Maybe BattleState,
     battleBackgrounds :: [Picture],
     currentBattleBg :: Int,
+    battleMenuIndex :: Int,
     rngSeed :: StdGen
   }
 
@@ -57,6 +58,7 @@ data GameState = GameState
 -- CONTROLADOR (INPUTS)
 --------------------------------------------------------------------------------
 handleInput :: Event -> GameState -> GameState
+-- Key Up
 handleInput (EventKey (SpecialKey KeyUp) Down _ _) state =
   case currentScreen state of
     StartScreen -> state {currentScreen = Menu}
@@ -64,7 +66,11 @@ handleInput (EventKey (SpecialKey KeyUp) Down _ _) state =
     Pokedex -> state {selectedPokemon = max 1 (selectedPokemon state - 1)}
     TeamSelect -> state {selectedPokemon = max 1 (selectedPokemon state - 1)}
     OpponentSelect -> state {selectedTrainerIndex = max 0 (selectedTrainerIndex state - 1)}
+    BattleScreen ->
+      let c = battleMenuIndex state
+       in state {battleMenuIndex = if c >= 2 then c - 2 else c}
     _ -> state
+-- Key Down
 handleInput (EventKey (SpecialKey KeyDown) Down _ _) state =
   case currentScreen state of
     StartScreen -> state {currentScreen = Menu}
@@ -72,7 +78,25 @@ handleInput (EventKey (SpecialKey KeyDown) Down _ _) state =
     Pokedex -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
     TeamSelect -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
     OpponentSelect -> state {selectedTrainerIndex = min (length allTrainers - 1) (selectedTrainerIndex state + 1)}
+    BattleScreen ->
+      let c = battleMenuIndex state
+       in state {battleMenuIndex = if c <= 1 then c + 2 else c}
     _ -> state
+-- Key Left
+handleInput (EventKey (SpecialKey KeyLeft) Down _ _) state =
+  case currentScreen state of
+    BattleScreen ->
+      let c = battleMenuIndex state
+       in state {battleMenuIndex = if odd c then c - 1 else c}
+    _ -> state
+-- Key Right
+handleInput (EventKey (SpecialKey KeyRight) Down _ _) state =
+  case currentScreen state of
+    BattleScreen ->
+      let c = battleMenuIndex state
+       in state {battleMenuIndex = if even c then c + 1 else c}
+    _ -> state
+-- Key Enter
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
   case currentScreen state of
     StartScreen -> state {currentScreen = Menu}
@@ -81,6 +105,7 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
     OpponentSelect -> handleOpponentSelectEnter state
     TeamSelect -> handleTeamSelectEnter state
     _ -> state
+-- Key Backspace / Delete
 handleInput (EventKey (SpecialKey KeyBackspace) Down _ _) state =
   case currentScreen state of
     TeamSelect ->
@@ -102,6 +127,7 @@ handleInput (EventKey (Char '\b') Down _ _) state =
         then goBack state
         else state {playerTeam = init (playerTeam state)}
     _ -> goBack state
+-- Key 'r' / 'R'
 handleInput (EventKey (Char 'r') Down _ _) state =
   case currentScreen state of
     TeamSelect -> handleRandomTeam state
@@ -110,6 +136,7 @@ handleInput (EventKey (Char 'R') Down _ _) state =
   case currentScreen state of
     TeamSelect -> handleRandomTeam state
     _ -> state
+-- Cualquier otra tecla
 handleInput (EventKey _ Down _ _) state =
   case currentScreen state of
     StartScreen -> state {currentScreen = Menu}

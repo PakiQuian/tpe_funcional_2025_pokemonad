@@ -49,6 +49,7 @@ initialState startBg menuBg logo pokemonFrontSprites pokemonBackSprites trainerS
       battleState = Nothing,
       battleBackgrounds = battleBgs,
       currentBattleBg = 0,
+      battleMenuIndex = 0,
       rngSeed = rng
     }
 
@@ -68,7 +69,7 @@ draw state = case currentScreen state of
   Multiplayer -> drawMultiplayerScreen
   TeamSelect -> drawTeamSelectScreen (menuBgImage state) (logoImage state) (selectedPokemon state) (playerTeam state) (pokemonFrontSprites state)
   OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state) (pokemonFrontSprites state) (trainerSprites state)
-  BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state)
+  BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state) (battleMenuIndex state)
 
 --------------------------------------------------------------------------------
 -- LOGICA DE TIEMPO
