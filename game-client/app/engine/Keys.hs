@@ -21,9 +21,9 @@ import Graphics.Gloss.Interface.Pure.Game
   )
 import System.Random (StdGen, randomR)
 
---------------------------------------------------------------------------------
+-- ==============================================================================
 -- CONTROLADOR (INPUTS)
---------------------------------------------------------------------------------
+-- ==============================================================================
 handleInput :: Event -> GameState -> GameState
 -- Key Up
 handleInput (EventKey (SpecialKey KeyUp) Down _ _) state =
@@ -39,17 +39,20 @@ handleInput (EventKey (SpecialKey KeyDown) Up _ _) state =
 handleInput (EventKey (SpecialKey KeyLeft) Down _ _) state =
   case currentScreen state of
     BattleScreen ->
-      if battleMenuType state == MainBattleMenu
-        then let c = battleMenuIndex state in state {battleMenuIndex = if odd c then c - 1 else c}
-        else let c = battleMoveIndex state in state {battleMoveIndex = if odd c then c - 1 else c}
+      case battleMenuType state of
+        MainBattleMenu -> let c = battleMenuIndex state in state {battleMenuIndex = if odd c then c - 1 else c}
+        FightMenu -> let c = battleMoveIndex state in state {battleMoveIndex = if odd c then c - 1 else c}
+        QuitConfirmMenu -> state {battleMoveIndex = 0}
     _ -> state
 -- Key Right
 handleInput (EventKey (SpecialKey KeyRight) Down _ _) state =
   case currentScreen state of
     BattleScreen ->
-      if battleMenuType state == MainBattleMenu
-        then let c = battleMenuIndex state in state {battleMenuIndex = if even c then c + 1 else c}
-        else let c = battleMoveIndex state in state {battleMoveIndex = if even c then c + 1 else c}
+      case battleMenuType state of
+        MainBattleMenu -> let c = battleMenuIndex state in state {battleMenuIndex = if even c then c + 1 else c}
+        FightMenu -> let c = battleMoveIndex state in state {battleMoveIndex = if even c then c + 1 else c}
+        QuitConfirmMenu -> state {battleMoveIndex = 1}
+    _ -> state
 -- Key Enter
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
   case currentScreen state of
@@ -59,50 +62,26 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
     OpponentSelect -> handleOpponentSelectEnter state
     TeamSelect -> handleTeamSelectEnter state
     BattleScreen ->
-      if battleMenuType state == MainBattleMenu
-        then case battleMenuIndex state of
-          0 -> state {battleMenuType = FightMenu, battleMoveIndex = 0} -- Entra a FIGHT
-          -- Aquí programarás BAG (1), POKEMON (2), RUN (3) luego
-          _ -> state
-        else
-          -- Aquí estás en FightMenu y apretaste Enter sobre un ataque.
-          -- Por ahora no hace nada, luego llamaremos a la lógica de daño.
-          state
+      case battleMenuType state of
+        MainBattleMenu ->
+          case battleMenuIndex state of
+            0 -> state {battleMenuType = FightMenu, battleMoveIndex = 0}
+            3 -> state {battleMenuType = QuitConfirmMenu, battleMoveIndex = 1}
+            _ -> state
+        FightMenu ->
+          state -- Aquí programaremos el ataque más adelante
+        BagMenu -> state -- Aquí programaremos la lógica de la bolsa más adelante
+        PokemonMenu -> state -- Aquí programaremos la lógica de cambio de Pokémon más adelante
+        QuitConfirmMenu ->
+          case battleMoveIndex state of
+            0 -> state {currentScreen = Menu, battleMenuType = MainBattleMenu, battleState = Nothing, battleMoveIndex = 0, battleMenuIndex = 0, selectedTrainer = Nothing, selectedTrainerIndex = 0, playerTeam = []}
+            1 -> state {battleMenuType = MainBattleMenu}
+            _ -> state
     _ -> state
 -- Key Backspace / Delete
-handleInput (EventKey (SpecialKey KeyBackspace) Down _ _) state =
-  case currentScreen state of
-    TeamSelect ->
-      if null (playerTeam state)
-        then goBack state
-        else state {playerTeam = init (playerTeam state)}
-    BattleScreen ->
-      if battleMenuType state == FightMenu
-        then state {battleMenuType = MainBattleMenu}
-        else state
-    _ -> goBack state
-handleInput (EventKey (SpecialKey KeyDelete) Down _ _) state =
-  case currentScreen state of
-    TeamSelect ->
-      if null (playerTeam state)
-        then goBack state
-        else state {playerTeam = init (playerTeam state)}
-    BattleScreen ->
-      if battleMenuType state == FightMenu
-        then state {battleMenuType = MainBattleMenu}
-        else state
-    _ -> goBack state
-handleInput (EventKey (Char '\b') Down _ _) state =
-  case currentScreen state of
-    TeamSelect ->
-      if null (playerTeam state)
-        then goBack state
-        else state {playerTeam = init (playerTeam state)}
-    BattleScreen ->
-      if battleMenuType state == FightMenu
-        then state {battleMenuType = MainBattleMenu}
-        else state
-    _ -> goBack state
+handleInput (EventKey (SpecialKey KeyBackspace) Down _ _) state = handleBackKey state
+handleInput (EventKey (SpecialKey KeyDelete) Down _ _) state = handleBackKey state
+handleInput (EventKey (Char '\b') Down _ _) state = handleBackKey state
 -- Key 'r' / 'R'
 handleInput (EventKey (Char 'r') Down _ _) state =
   case currentScreen state of
@@ -168,6 +147,21 @@ moveDown state = case currentScreen state of
 --------------------------------------------------------------------------------
 -- FUNCIONES AUXILIARES
 --------------------------------------------------------------------------------
+
+handleBackKey :: GameState -> GameState
+handleBackKey state = case currentScreen state of
+  TeamSelect ->
+    if null (playerTeam state)
+      then goBack state
+      else state {playerTeam = init (playerTeam state)}
+  BattleScreen ->
+    case battleMenuType state of
+      FightMenu -> state {battleMenuType = MainBattleMenu}
+      BagMenu -> state {battleMenuType = MainBattleMenu}
+      PokemonMenu -> state {battleMenuType = MainBattleMenu}
+      QuitConfirmMenu -> state {battleMenuType = MainBattleMenu}
+      _ -> state
+  _ -> goBack state
 
 goBack :: GameState -> GameState
 goBack state = case currentScreen state of

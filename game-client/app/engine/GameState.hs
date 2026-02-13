@@ -22,7 +22,7 @@ data Screen
   | BattleScreen
   deriving (Show, Eq)
 
-data BattleMenuType = MainBattleMenu | FightMenu | BagMenu | PokemonMenu
+data BattleMenuType = MainBattleMenu | FightMenu | BagMenu | PokemonMenu | QuitConfirmMenu
   deriving (Show, Eq)
 
 data GameState = GameState

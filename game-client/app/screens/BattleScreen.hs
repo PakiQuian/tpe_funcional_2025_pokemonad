@@ -98,6 +98,9 @@ drawBattleMenu activePokemon menuIdx menuType moveIdx = translate 0 (-280) $
   case menuType of
     MainBattleMenu -> drawMainMenu activePokemon menuIdx
     FightMenu -> drawFightMenu activePokemon moveIdx
+    BagMenu -> drawTextWithShadow "BAG MENU (Not Implemented)" 0.2 0 white
+    PokemonMenu -> drawTextWithShadow "POKEMON MENU (Not Implemented)" 0.2 0 white
+    QuitConfirmMenu -> drawQuitMenu moveIdx
 
 -- ===============================================================
 -- MENÚ PRINCIPAL (What will PKMN do?)
@@ -130,14 +133,11 @@ drawOptionsGrid menuIndex =
 drawFightMenu :: BattlePokemon -> Int -> Picture
 drawFightMenu activePokemon moveIdx =
   let moves = bpMoves activePokemon
-      -- Conseguir el movimiento seleccionado para mostrar su PP y Tipo
       selectedMove = if moveIdx < length moves then Just (moves !! moveIdx) else Nothing
    in pictures
-        [ -- CAJA IZQUIERDA (Los 4 ataques)
-          translate (-200) 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 880 160,
+        [ translate (-200) 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 880 160,
           translate (-200) 0 $ color white $ rectangleWire 870 150,
           translate (-200) 0 $ drawMovesGrid moves moveIdx,
-          -- CAJA DERECHA (PP y Tipo)
           translate 450 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 380 160,
           translate 450 0 $ color white $ rectangleWire 370 150,
           translate 450 0 $ drawMoveDetails selectedMove
@@ -168,6 +168,34 @@ drawMoveDetails (Just move) =
         scale 0.2 0.2 $
           color white $
             text (map toUpper (show (mType move)))
+    ]
+
+-- ===============================================================
+-- MENÚ DE BAG
+-- ===============================================================
+
+-- ===============================================================
+-- MENÚ DE POKEMON
+-- ===============================================================
+
+-- ===============================================================
+-- MENÚ DE CONFIRMACIÓN (QUIT)
+-- ===============================================================
+drawQuitMenu :: Int -> Picture
+drawQuitMenu moveIdx =
+  pictures
+    [ -- Fondo
+      color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+      color white $ rectangleWire 1270 150,
+      translate (-580) 20 $
+        scale 0.25 0.25 $
+          color white $
+            text "Are you sure you want to quit?",
+      translate 350 0 $
+        pictures
+          [ drawMenuOption 0 "YES" (-100) 0 moveIdx,
+            drawMenuOption 1 "NO" 100 0 moveIdx
+          ]
     ]
 
 -- ===============================================================
