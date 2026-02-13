@@ -7,6 +7,7 @@ module Engine.Keys
 where
 
 import qualified Data.Map as Map
+import Engine.GameState (BattleMenuType (..), GameState (..), Screen (..))
 import Game.Battle (BattleState, initBattle)
 import Game.Pokemon (allPokemon)
 import Game.Trainer (Trainer, allTrainers)
@@ -19,44 +20,6 @@ import Graphics.Gloss.Interface.Pure.Game
     SpecialKey (KeyBackspace, KeyDelete, KeyDown, KeyEnter, KeyLeft, KeyRight, KeyUp),
   )
 import System.Random (StdGen, randomR)
-
---------------------------------------------------------------------------------
--- TIPOS DE DATOS
---------------------------------------------------------------------------------
-
-data Screen
-  = StartScreen
-  | Menu
-  | Pokedex
-  | PokemonDetail
-  | Multiplayer
-  | TeamSelect
-  | OpponentSelect
-  | BattleScreen
-  deriving (Show, Eq)
-
-data GameState = GameState
-  { currentScreen :: Screen,
-    selectedOption :: Int,
-    selectedPokemon :: Int,
-    playerTeam :: [Int],
-    selectedTrainer :: Maybe Trainer,
-    selectedTrainerIndex :: Int,
-    startBgImage :: Picture,
-    menuBgImage :: Picture,
-    logoImage :: Picture,
-    pokemonFrontSprites :: Map.Map Int Picture,
-    pokemonBackSprites :: Map.Map Int Picture,
-    trainerSprites :: Map.Map Int Picture,
-    battleState :: Maybe BattleState,
-    battleBackgrounds :: [Picture],
-    currentBattleBg :: Int,
-    battleMenuIndex :: Int,
-    rngSeed :: StdGen,
-    holdingUp :: Bool,
-    holdingDown :: Bool,
-    scrollTimer :: Float
-  }
 
 --------------------------------------------------------------------------------
 -- CONTROLADOR (INPUTS)
@@ -76,16 +39,17 @@ handleInput (EventKey (SpecialKey KeyDown) Up _ _) state =
 handleInput (EventKey (SpecialKey KeyLeft) Down _ _) state =
   case currentScreen state of
     BattleScreen ->
-      let c = battleMenuIndex state
-       in state {battleMenuIndex = if odd c then c - 1 else c}
+      if battleMenuType state == MainBattleMenu
+        then let c = battleMenuIndex state in state {battleMenuIndex = if odd c then c - 1 else c}
+        else let c = battleMoveIndex state in state {battleMoveIndex = if odd c then c - 1 else c}
     _ -> state
 -- Key Right
 handleInput (EventKey (SpecialKey KeyRight) Down _ _) state =
   case currentScreen state of
     BattleScreen ->
-      let c = battleMenuIndex state
-       in state {battleMenuIndex = if even c then c + 1 else c}
-    _ -> state
+      if battleMenuType state == MainBattleMenu
+        then let c = battleMenuIndex state in state {battleMenuIndex = if even c then c + 1 else c}
+        else let c = battleMoveIndex state in state {battleMoveIndex = if even c then c + 1 else c}
 -- Key Enter
 handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
   case currentScreen state of
@@ -94,6 +58,16 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
     Pokedex -> state {currentScreen = PokemonDetail}
     OpponentSelect -> handleOpponentSelectEnter state
     TeamSelect -> handleTeamSelectEnter state
+    BattleScreen ->
+      if battleMenuType state == MainBattleMenu
+        then case battleMenuIndex state of
+          0 -> state {battleMenuType = FightMenu, battleMoveIndex = 0} -- Entra a FIGHT
+          -- Aquí programarás BAG (1), POKEMON (2), RUN (3) luego
+          _ -> state
+        else
+          -- Aquí estás en FightMenu y apretaste Enter sobre un ataque.
+          -- Por ahora no hace nada, luego llamaremos a la lógica de daño.
+          state
     _ -> state
 -- Key Backspace / Delete
 handleInput (EventKey (SpecialKey KeyBackspace) Down _ _) state =
@@ -102,6 +76,10 @@ handleInput (EventKey (SpecialKey KeyBackspace) Down _ _) state =
       if null (playerTeam state)
         then goBack state
         else state {playerTeam = init (playerTeam state)}
+    BattleScreen ->
+      if battleMenuType state == FightMenu
+        then state {battleMenuType = MainBattleMenu}
+        else state
     _ -> goBack state
 handleInput (EventKey (SpecialKey KeyDelete) Down _ _) state =
   case currentScreen state of
@@ -109,6 +87,10 @@ handleInput (EventKey (SpecialKey KeyDelete) Down _ _) state =
       if null (playerTeam state)
         then goBack state
         else state {playerTeam = init (playerTeam state)}
+    BattleScreen ->
+      if battleMenuType state == FightMenu
+        then state {battleMenuType = MainBattleMenu}
+        else state
     _ -> goBack state
 handleInput (EventKey (Char '\b') Down _ _) state =
   case currentScreen state of
@@ -116,6 +98,10 @@ handleInput (EventKey (Char '\b') Down _ _) state =
       if null (playerTeam state)
         then goBack state
         else state {playerTeam = init (playerTeam state)}
+    BattleScreen ->
+      if battleMenuType state == FightMenu
+        then state {battleMenuType = MainBattleMenu}
+        else state
     _ -> goBack state
 -- Key 'r' / 'R'
 handleInput (EventKey (Char 'r') Down _ _) state =
@@ -161,8 +147,9 @@ moveUp state = case currentScreen state of
   TeamSelect -> state {selectedPokemon = max 1 (selectedPokemon state - 1)}
   OpponentSelect -> state {selectedTrainerIndex = max 0 (selectedTrainerIndex state - 1)}
   BattleScreen ->
-    let c = battleMenuIndex state
-     in state {battleMenuIndex = if c >= 2 then c - 2 else c}
+    if battleMenuType state == MainBattleMenu
+      then let c = battleMenuIndex state in state {battleMenuIndex = if c >= 2 then c - 2 else c}
+      else let c = battleMoveIndex state in state {battleMoveIndex = if c >= 2 then c - 2 else c}
   _ -> state
 
 moveDown :: GameState -> GameState
@@ -173,8 +160,9 @@ moveDown state = case currentScreen state of
   TeamSelect -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
   OpponentSelect -> state {selectedTrainerIndex = min (length allTrainers - 1) (selectedTrainerIndex state + 1)}
   BattleScreen ->
-    let c = battleMenuIndex state
-     in state {battleMenuIndex = if c <= 1 then c + 2 else c}
+    if battleMenuType state == MainBattleMenu
+      then let c = battleMenuIndex state in state {battleMenuIndex = if c <= 1 then c + 2 else c}
+      else let c = battleMoveIndex state in state {battleMoveIndex = if c <= 1 then c + 2 else c}
   _ -> state
 
 --------------------------------------------------------------------------------

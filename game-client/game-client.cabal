@@ -11,6 +11,7 @@ executable pokemonad
     main-is:          Main.hs
     other-modules:    Engine.Keys,
                       Engine.Common,
+                      Engine.GameState,
                       Screens.StartScreen,
                       Screens.MenuScreen,
                       Screens.PokedexScreen,

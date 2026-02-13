@@ -2,7 +2,8 @@ module Main where
 
 import qualified Data.Map as Map
 import Engine.Common (loadPngSafe)
-import Engine.Keys (GameState (..), Screen (..), handleInput, handleTick)
+import Engine.GameState (BattleMenuType (..), GameState (..), Screen (..))
+import Engine.Keys (handleInput, handleTick)
 import Game.Pokemon (Pokemon (..), allPokemon)
 import Game.Trainer (Trainer (..), allTrainers)
 import Graphics.Gloss
@@ -53,7 +54,9 @@ initialState startBg menuBg logo pokemonFrontSprites pokemonBackSprites trainerS
       rngSeed = rng,
       holdingUp = False,
       holdingDown = False,
-      scrollTimer = 0.0
+      scrollTimer = 0.0,
+      battleMenuType = MainBattleMenu,
+      battleMoveIndex = 0
     }
 
 --------------------------------------------------------------------------------
@@ -72,7 +75,7 @@ draw state = case currentScreen state of
   Multiplayer -> drawMultiplayerScreen
   TeamSelect -> drawTeamSelectScreen (menuBgImage state) (logoImage state) (selectedPokemon state) (playerTeam state) (pokemonFrontSprites state)
   OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state) (pokemonFrontSprites state) (trainerSprites state)
-  BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state) (battleMenuIndex state)
+  BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state) (battleMenuIndex state) (battleMenuType state) (battleMoveIndex state)
 
 --------------------------------------------------------------------------------
 -- LOGICA DE TIEMPO

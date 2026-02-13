@@ -1,8 +1,11 @@
 module Screens.BattleScreen (drawBattleScreen) where
 
+import Data.Char (toUpper)
 import qualified Data.Map as Map
 import Engine.Common (drawTextWithShadow, pokemonBlue, pokemonYellow)
+import Engine.GameState (BattleMenuType (..))
 import Game.Battle (BattlePokemon (..), BattleState (..), bpHp, bpMaxHp, bpOriginal)
+import Game.Move (Move (..))
 import Game.Pokemon (Pokemon (..))
 import Graphics.Gloss
   ( Picture,
@@ -21,8 +24,8 @@ import Graphics.Gloss
   )
 
 -- Dibuja la pantalla de batalla
-drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map Int Picture -> Map.Map Int Picture -> Int -> Picture
-drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackSprites menuIndex =
+drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map Int Picture -> Map.Map Int Picture -> Int -> BattleMenuType -> Int -> Picture
+drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackSprites menuIndex menuType moveIndex =
   let bg =
         if null backgrounds
           then blank
@@ -34,7 +37,7 @@ drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackS
             [ bg,
               drawEnemyUnit (enemyActive state) pokemonFrontSprites,
               drawPlayerUnit (playerActive state) pokemonBackSprites,
-              drawBattleMenu (playerActive state) menuIndex
+              drawBattleMenu (playerActive state) menuIndex menuType moveIndex
             ]
 
 -- ===============================================================
@@ -92,21 +95,30 @@ drawHUD bp isPlayer =
     ]
 
 -- ===============================================================
--- MENÚ DE BATALLA (Abajo)
+-- DIRECTOR DEL MENÚ DE BATALLA
 -- ===============================================================
 
-drawBattleMenu :: BattlePokemon -> Int -> Picture
-drawBattleMenu activePokemon menuIndex =
-  translate 0 (-280) $
-    pictures
-      [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
-        color white $ rectangleWire 1270 150,
-        translate (-580) 20 $
-          scale 0.25 0.25 $
-            color white $
-              text ("What will " ++ pName (bpOriginal activePokemon) ++ " do?"),
-        translate 350 0 $ drawOptionsGrid menuIndex
-      ]
+drawBattleMenu :: BattlePokemon -> Int -> BattleMenuType -> Int -> Picture
+drawBattleMenu activePokemon menuIdx menuType moveIdx = translate 0 (-280) $
+  case menuType of
+    MainBattleMenu -> drawMainMenu activePokemon menuIdx
+    FightMenu -> drawFightMenu activePokemon moveIdx
+
+-- ===============================================================
+-- MENÚ PRINCIPAL (What will PKMN do?)
+-- ===============================================================
+
+drawMainMenu :: BattlePokemon -> Int -> Picture
+drawMainMenu activePokemon menuIdx =
+  pictures
+    [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+      color white $ rectangleWire 1270 150,
+      translate (-580) 20 $
+        scale 0.25 0.25 $
+          color white $
+            text ("What will " ++ pName (bpOriginal activePokemon) ++ " do?"),
+      translate 350 0 $ drawOptionsGrid menuIdx
+    ]
 
 drawOptionsGrid :: Int -> Picture
 drawOptionsGrid menuIndex =
@@ -116,6 +128,56 @@ drawOptionsGrid menuIndex =
       drawMenuOption 2 "POKEMON" (-150) (-35) menuIndex,
       drawMenuOption 3 "QUIT" 80 (-35) menuIndex
     ]
+
+-- ===============================================================
+-- MENÚ DE ATAQUES (FIGHT)
+-- ===============================================================
+drawFightMenu :: BattlePokemon -> Int -> Picture
+drawFightMenu activePokemon moveIdx =
+  let moves = bpMoves activePokemon
+      -- Conseguir el movimiento seleccionado para mostrar su PP y Tipo
+      selectedMove = if moveIdx < length moves then Just (moves !! moveIdx) else Nothing
+   in pictures
+        [ -- CAJA IZQUIERDA (Los 4 ataques)
+          translate (-200) 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 880 160,
+          translate (-200) 0 $ color white $ rectangleWire 870 150,
+          translate (-200) 0 $ drawMovesGrid moves moveIdx,
+          -- CAJA DERECHA (PP y Tipo)
+          translate 450 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 380 160,
+          translate 450 0 $ color white $ rectangleWire 370 150,
+          translate 450 0 $ drawMoveDetails selectedMove
+        ]
+
+drawMovesGrid :: [Move] -> Int -> Picture
+drawMovesGrid moves selectedIndex =
+  pictures
+    [ drawMoveOption 0 (safeMoveName moves 0) (-300) 25 selectedIndex,
+      drawMoveOption 1 (safeMoveName moves 1) 50 25 selectedIndex,
+      drawMoveOption 2 (safeMoveName moves 2) (-300) (-35) selectedIndex,
+      drawMoveOption 3 (safeMoveName moves 3) 50 (-35) selectedIndex
+    ]
+  where
+    safeMoveName ms i = if i < length ms then mName (ms !! i) else "-"
+
+drawMoveDetails :: Maybe Move -> Picture
+drawMoveDetails Nothing = blank
+drawMoveDetails (Just move) =
+  pictures
+    [ translate (-150) 25 $ scale 0.2 0.2 $ color white $ text "PP",
+      translate 10 25 $
+        scale 0.2 0.2 $
+          color white $
+            text (show (mPP move) ++ "/" ++ show (mMaxPP move)),
+      translate (-150) (-35) $ scale 0.2 0.2 $ color white $ text "TYPE/",
+      translate (-10) (-35) $
+        scale 0.2 0.2 $
+          color white $
+            text (map toUpper (show (mType move)))
+    ]
+
+-- ===============================================================
+-- Cursor
+-- ===============================================================
 
 drawMenuOption :: Int -> String -> Float -> Float -> Int -> Picture
 drawMenuOption index label xPos yPos selectedIndex =
@@ -129,3 +191,9 @@ drawMenuOption index label xPos yPos selectedIndex =
           then translate (xPos - 25) (yPos + 3) $ color pokemonYellow $ polygon [(0, 0), (0, 15), (12, 7.5)]
           else blank
    in pictures [cursor, txt]
+
+drawMoveOption :: Int -> String -> Float -> Float -> Int -> Picture
+drawMoveOption index label xPos yPos selectedIndex =
+  if label == "-"
+    then blank -- No dibujar si no hay ataque
+    else drawMenuOption index (map toUpper label) xPos yPos selectedIndex
