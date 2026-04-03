@@ -2,11 +2,9 @@ module P2P.Serialization
   ( -- handshake / versión
     protocolMagic,
     currentProtocolVersion,
-    
     -- tipos de mensaje
     Handshake (..),
     AppMsg (..),
-
     -- enmarcar y parsear streams
     maxFramedPayloadBytes,
     encodeFramed,
