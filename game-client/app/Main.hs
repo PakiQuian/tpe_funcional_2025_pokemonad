@@ -1,24 +1,16 @@
 module Main where
 
+import Control.Concurrent.STM.TQueue (newTQueueIO)
 import qualified Data.Map as Map
 import Engine.Common (loadPngSafe)
 import Engine.GameState (BattleMenuType (..), GameState (..), Screen (..))
 import Engine.Keys (handleInput, handleTick)
+import Engine.World (NetSubState (..), World (..), drainNetInbox)
 import Game.Pokemon (Pokemon (..), allPokemon)
 import Game.Trainer (Trainer (..), allTrainers)
-import Graphics.Gloss
-  ( Display (InWindow),
-    Picture,
-    black,
-    loadBMP,
-    play,
-  )
-import Graphics.Gloss.Interface.Pure.Game
-  ( Display (InWindow),
-    Picture,
-    black,
-    play,
-  )
+import Graphics.Gloss (Display (InWindow), Picture, black, loadBMP)
+import Graphics.Gloss.Interface.IO.Game (playIO)
+import Graphics.Gloss.Interface.Pure.Game (Event)
 import Screens.BattleScreen (drawBattleScreen)
 import Screens.MenuScreen (drawMenuScreen)
 import Screens.MultiplayerScreen (drawMultiplayerScreen)
@@ -27,7 +19,7 @@ import Screens.PokedexScreen (drawPokedexScreen)
 import Screens.PokemonScreen (drawPokemonScreen)
 import Screens.StartScreen (drawStartScreen)
 import Screens.TeamSelectScreen (drawTeamSelectScreen)
-import System.Random (StdGen, getStdGen, mkStdGen)
+import System.Random (StdGen, getStdGen)
 
 --------------------------------------------------------------------------------
 -- MODELO DE DATOS (ESTADO)
@@ -77,11 +69,17 @@ draw state = case currentScreen state of
   OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state) (pokemonFrontSprites state) (trainerSprites state)
   BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state) (battleMenuIndex state) (battleMenuType state) (battleMoveIndex state)
 
---------------------------------------------------------------------------------
--- LOGICA DE TIEMPO
---------------------------------------------------------------------------------
-update :: Float -> GameState -> GameState
-update = handleTick
+drawWorld :: World -> IO Picture
+drawWorld = pure . draw . worldGame
+
+handleWorldInput :: Event -> World -> IO World
+handleWorldInput ev w =
+  pure w {worldGame = handleInput ev (worldGame w)}
+
+handleWorldTick :: Float -> World -> IO World
+handleWorldTick dt w = do
+  wDrained <- drainNetInbox w
+  pure wDrained {worldGame = handleTick dt (worldGame wDrained)}
 
 --------------------------------------------------------------------------------
 -- MAIN
@@ -130,16 +128,20 @@ main = do
 
   putStrLn "Iniciando Ventana..."
 
+  netInQueue <- newTQueueIO
   let window = InWindow "Pokemonad P2P" (1280, 720) (100, 100)
+      game0 =
+        initialState startBg menuBg logo pokemonFrontSpriteMap pokemonBackSpriteMap trainerSpriteMap battleBgs rng
+      world0 = World {worldGame = game0, netInQueue = netInQueue, netSubState = NetDisconnected}
 
-  play
+  playIO
     window
     black
     30
-    (initialState startBg menuBg logo pokemonFrontSpriteMap pokemonBackSpriteMap trainerSpriteMap battleBgs rng)
-    draw
-    handleInput
-    update
+    world0
+    drawWorld
+    handleWorldInput
+    handleWorldTick
 
 --------------------------------------------------------------------------------
 -- HELPERS: Carga masiva de sprites

@@ -12,6 +12,7 @@ executable pokemonad
     other-modules:    Engine.Keys,
                       Engine.Common,
                       Engine.GameState,
+                      Engine.World,
                       Screens.StartScreen,
                       Screens.MenuScreen,
                       Screens.PokedexScreen,
@@ -27,6 +28,7 @@ executable pokemonad
                       game-engine,
                       containers,
                       random >= 1.2,
+                      stm,
                       gloss,
                       gloss-juicy,
                       text
