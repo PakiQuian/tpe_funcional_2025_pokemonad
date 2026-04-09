@@ -1,11 +1,25 @@
 module Main where
 
+import Control.Concurrent (forkIO)
+import Control.Monad (void)
+import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TQueue (newTQueueIO)
+import Control.Concurrent.STM.TVar (newTVarIO, writeTVar)
+import Control.Exception (SomeException, try)
 import qualified Data.Map as Map
 import Engine.Common (loadPngSafe)
-import Engine.GameState (BattleMenuType (..), GameState (..), Screen (..))
+import Engine.GameState (BattleMenuType (..), GameState (..), MultiplayerIntent (..), Screen (..))
 import Engine.Keys (handleInput, handleTick)
-import Engine.World (NetSubState (..), World (..), drainNetInbox)
+import Engine.World
+  ( NetConnAsync (..),
+    NetSubState (..),
+    World (..),
+    disconnectNetWorld,
+    drainNetInbox,
+    mergeNetAsync,
+  )
+import Network.Socket (HostName, PortNumber, SockAddr, Socket)
+import P2P.Communication (connectTo, forkRecvLoop, listenAndAccept)
 import Game.Pokemon (Pokemon (..), allPokemon)
 import Game.Trainer (Trainer (..), allTrainers)
 import Graphics.Gloss (Display (InWindow), Picture, black, loadBMP)
@@ -48,14 +62,19 @@ initialState startBg menuBg logo pokemonFrontSprites pokemonBackSprites trainerS
       holdingDown = False,
       scrollTimer = 0.0,
       battleMenuType = MainBattleMenu,
-      battleMoveIndex = 0
+      battleMoveIndex = 0,
+      multiplayerHost = "127.0.0.1",
+      multiplayerPort = "7878",
+      multiplayerRow = 0,
+      multiplayerPending = Nothing,
+      multiplayerError = Nothing
     }
 
 --------------------------------------------------------------------------------
 -- VISTA (RENDER)
 --------------------------------------------------------------------------------
-draw :: GameState -> Picture
-draw state = case currentScreen state of
+draw :: GameState -> NetSubState -> Picture
+draw state netSt = case currentScreen state of
   StartScreen -> drawStartScreen (startBgImage state)
   Menu -> drawMenuScreen (menuBgImage state) (logoImage state) (selectedOption state)
   Pokedex ->
@@ -64,22 +83,79 @@ draw state = case currentScreen state of
   PokemonDetail ->
     let maybeSprite = Map.lookup (selectedPokemon state) (pokemonFrontSprites state)
      in drawPokemonScreen (menuBgImage state) (logoImage state) (selectedPokemon state) maybeSprite
-  Multiplayer -> drawMultiplayerScreen
+  Multiplayer -> drawMultiplayerScreen (menuBgImage state) (logoImage state) state netSt
   TeamSelect -> drawTeamSelectScreen (menuBgImage state) (logoImage state) (selectedPokemon state) (playerTeam state) (pokemonFrontSprites state)
   OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state) (pokemonFrontSprites state) (trainerSprites state)
   BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state) (battleMenuIndex state) (battleMenuType state) (battleMoveIndex state)
 
 drawWorld :: World -> IO Picture
-drawWorld = pure . draw . worldGame
+drawWorld w = pure $ draw (worldGame w) (netSubState w)
 
 handleWorldInput :: Event -> World -> IO World
-handleWorldInput ev w =
-  pure w {worldGame = handleInput ev (worldGame w)}
+handleWorldInput ev w = do
+  let g0 = worldGame w
+      g1 = handleInput ev g0
+      leftMP = currentScreen g0 == Multiplayer && currentScreen g1 /= Multiplayer
+  w1 <- if leftMP then disconnectNetWorld w else pure w
+  let w2 = w1 {worldGame = g1}
+  case multiplayerPending g1 of
+    Nothing -> pure w2
+    Just intent ->
+      let g2 = g1 {multiplayerPending = Nothing}
+       in startMultiplayerNet intent (w2 {worldGame = g2})
 
 handleWorldTick :: Float -> World -> IO World
 handleWorldTick dt w = do
-  wDrained <- drainNetInbox w
+  wMerged <- mergeNetAsync w
+  wDrained <- drainNetInbox wMerged
   pure wDrained {worldGame = handleTick dt (worldGame wDrained)}
+
+runListen :: PortNumber -> World -> IO ()
+runListen port w = do
+  r <- try (listenAndAccept port) :: IO (Either SomeException (Socket, SockAddr))
+  case r of
+    Left e ->
+      atomically $ writeTVar (netConnAsync w) (Just $ NetConnErr (show e))
+    Right (sock, _) -> do
+      _ <- forkRecvLoop sock (netInQueue w)
+      atomically $ writeTVar (netConnAsync w) (Just $ NetConnOk sock NetInLobby)
+
+runConnect :: HostName -> PortNumber -> World -> IO ()
+runConnect host port w = do
+  r <- try (connectTo host port) :: IO (Either SomeException Socket)
+  case r of
+    Left e ->
+      atomically $ writeTVar (netConnAsync w) (Just $ NetConnErr (show e))
+    Right sock -> do
+      _ <- forkRecvLoop sock (netInQueue w)
+      atomically $ writeTVar (netConnAsync w) (Just $ NetConnOk sock NetInLobby)
+
+startMultiplayerNet :: MultiplayerIntent -> World -> IO World
+startMultiplayerNet intent w = case netSubState w of
+  NetListening _ ->
+    pure w {worldGame = (worldGame w) {multiplayerError = Just "Ya estas en escucha."}}
+  NetConnecting _ _ ->
+    pure w {worldGame = (worldGame w) {multiplayerError = Just "Conexion en curso."}}
+  NetInLobby ->
+    pure w {worldGame = (worldGame w) {multiplayerError = Just "Ya conectado."}}
+  NetInBattle ->
+    pure w {worldGame = (worldGame w) {multiplayerError = Just "En batalla."}}
+  NetDisconnected ->
+    case intent of
+      MPListen port -> do
+        void $ forkIO (runListen port w)
+        pure
+          w
+            { netSubState = NetListening (fromIntegral port),
+              worldGame = (worldGame w) {multiplayerError = Nothing}
+            }
+      MPConnect host port -> do
+        void $ forkIO (runConnect host port w)
+        pure
+          w
+            { netSubState = NetConnecting host (fromIntegral port),
+              worldGame = (worldGame w) {multiplayerError = Nothing}
+            }
 
 --------------------------------------------------------------------------------
 -- MAIN
@@ -129,10 +205,18 @@ main = do
   putStrLn "Iniciando Ventana..."
 
   netInQueue <- newTQueueIO
+  netAsync <- newTVarIO Nothing
   let window = InWindow "Pokemonad P2P" (1280, 720) (100, 100)
       game0 =
         initialState startBg menuBg logo pokemonFrontSpriteMap pokemonBackSpriteMap trainerSpriteMap battleBgs rng
-      world0 = World {worldGame = game0, netInQueue = netInQueue, netSubState = NetDisconnected}
+      world0 =
+        World
+          { worldGame = game0,
+            netInQueue = netInQueue,
+            netSubState = NetDisconnected,
+            netSocket = Nothing,
+            netConnAsync = netAsync
+          }
 
   playIO
     window

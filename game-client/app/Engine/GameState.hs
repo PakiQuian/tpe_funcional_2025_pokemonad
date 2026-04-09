@@ -2,6 +2,7 @@ module Engine.GameState
   ( Screen (..),
     GameState (..),
     BattleMenuType (..),
+    MultiplayerIntent (..),
   )
 where
 
@@ -9,7 +10,14 @@ import qualified Data.Map as Map
 import Game.Battle (BattleState)
 import Game.Trainer (Trainer)
 import Graphics.Gloss (Picture)
+import Network.Socket (HostName, PortNumber)
 import System.Random (StdGen)
+
+-- | Acción de red solicitada desde la pantalla multijugador; Main la ejecuta en IO.
+data MultiplayerIntent
+  = MPListen PortNumber
+  | MPConnect HostName PortNumber
+  deriving (Eq, Show)
 
 data Screen
   = StartScreen
@@ -50,5 +58,12 @@ data GameState = GameState
     battleMenuIndex :: Int,
     -- Campos para el submenu
     battleMenuType :: BattleMenuType,
-    battleMoveIndex :: Int
+    battleMoveIndex :: Int,
+    -- Multijugador P2P (host / puerto / acciones)
+    multiplayerHost :: String,
+    multiplayerPort :: String,
+    -- 0 = editar host, 1 = editar puerto, 2 = escuchar, 3 = conectar
+    multiplayerRow :: Int,
+    multiplayerPending :: Maybe MultiplayerIntent,
+    multiplayerError :: Maybe String
   }

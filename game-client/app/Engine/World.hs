@@ -1,15 +1,20 @@
 module Engine.World
   ( NetSubState (..),
+    NetConnAsync (..),
     World (..),
     drainNetInbox,
     applyNetMsg,
+    mergeNetAsync,
+    disconnectNetWorld,
   )
 where
 
-import Control.Concurrent.STM (STM, atomically)
+import Control.Concurrent.STM (STM, atomically, readTVar, writeTVar)
 import Control.Concurrent.STM.TQueue (TQueue, tryReadTQueue)
+import Control.Concurrent.STM.TVar (TVar)
 import Data.List (foldl')
-import Engine.GameState (GameState)
+import Engine.GameState (GameState (..), Screen (..))
+import Network.Socket (Socket, close)
 import P2P.Serialization (AppMsg (..))
 
 -- Posible estados de la subfase de red.
@@ -21,11 +26,19 @@ data NetSubState
   | NetInBattle
   deriving (Eq, Show)
 
+-- | Resultado de listen/connect en un hilo auxiliar; el hilo principal lo fusiona en 'handleWorldTick'.
+data NetConnAsync
+  = NetConnOk Socket NetSubState
+  | NetConnErr String
+  deriving (Eq, Show)
+
 -- Estado de la ventana Gloss + canal de entrada de mensajes de red
 data World = World
   { worldGame :: GameState,
     netInQueue :: TQueue AppMsg,
-    netSubState :: NetSubState
+    netSubState :: NetSubState,
+    netSocket :: Maybe Socket,
+    netConnAsync :: TVar (Maybe NetConnAsync)
   }
 
 -- Vacía la cola en una sola transacción STM y aplica los mensajes al juego.
@@ -57,3 +70,44 @@ applyNetMsg _ gs = gs
 netSubStateAfterMsg :: NetSubState -> AppMsg -> NetSubState
 netSubStateAfterMsg NetInLobby AppMsgBattleReady = NetInBattle
 netSubStateAfterMsg s _ = s
+
+-- | Incorpora un resultado asíncrono de conexión (si el jugador sigue en multijugador).
+mergeNetAsync :: World -> IO World
+mergeNetAsync w = do
+  m <- atomically $ do
+    x <- readTVar (netConnAsync w)
+    writeTVar (netConnAsync w) Nothing
+    pure x
+  case m of
+    Nothing -> pure w
+    Just (NetConnErr err) ->
+      pure
+        w
+          { netSubState = NetDisconnected,
+            worldGame = (worldGame w) {multiplayerError = Just err}
+          }
+    Just (NetConnOk sock st) ->
+      if currentScreen (worldGame w) /= Multiplayer
+        then do
+          close sock
+          pure w
+        else
+          pure
+            w
+              { netSocket = Just sock,
+                netSubState = st,
+                worldGame = (worldGame w) {multiplayerError = Nothing}
+              }
+
+-- | Cierra el socket activo y vuelve el subestado a desconectado.
+disconnectNetWorld :: World -> IO World
+disconnectNetWorld w =
+  case netSocket w of
+    Just sock -> do
+      close sock
+      pure
+        w
+          { netSocket = Nothing,
+            netSubState = NetDisconnected
+          }
+    Nothing -> pure w {netSubState = NetDisconnected}

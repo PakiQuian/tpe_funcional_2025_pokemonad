@@ -27,6 +27,7 @@ executable pokemonad
                       p2p-net,
                       game-engine,
                       containers,
+                      network,
                       random >= 1.2,
                       stm,
                       gloss,

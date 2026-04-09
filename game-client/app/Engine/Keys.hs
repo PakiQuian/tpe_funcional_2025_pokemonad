@@ -6,20 +6,22 @@ module Engine.Keys
   )
 where
 
+import Data.Char (isAlphaNum, isDigit)
 import qualified Data.Map as Map
-import Engine.GameState (BattleMenuType (..), GameState (..), Screen (..))
+import Engine.GameState (BattleMenuType (..), GameState (..), MultiplayerIntent (..), Screen (..))
 import Game.Battle (BattleState, initBattle)
 import Game.Pokemon (allPokemon)
 import Game.Trainer (Trainer, allTrainers)
-import Graphics.Gloss (Picture)
 import Graphics.Gloss.Interface.Pure.Game
   ( Event (EventKey),
     Key (Char, SpecialKey),
     KeyState (Down, Up),
     Picture,
-    SpecialKey (KeyBackspace, KeyDelete, KeyDown, KeyEnter, KeyLeft, KeyRight, KeyUp),
+    SpecialKey (KeyBackspace, KeyDelete, KeyDown, KeyEnter, KeyEsc, KeyLeft, KeyRight, KeyUp),
   )
+import Network.Socket (PortNumber)
 import System.Random (StdGen, randomR)
+import Text.Read (readMaybe)
 
 -- ==============================================================================
 -- CONTROLADOR (INPUTS)
@@ -58,6 +60,7 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
   case currentScreen state of
     StartScreen -> state {currentScreen = Menu}
     Menu -> state {currentScreen = chooseScreen (selectedOption state)}
+    Multiplayer -> handleMultiplayerEnter state
     Pokedex -> state {currentScreen = PokemonDetail}
     OpponentSelect -> handleOpponentSelectEnter state
     TeamSelect -> handleTeamSelectEnter state
@@ -82,6 +85,8 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
 handleInput (EventKey (SpecialKey KeyBackspace) Down _ _) state = handleBackKey state
 handleInput (EventKey (SpecialKey KeyDelete) Down _ _) state = handleBackKey state
 handleInput (EventKey (Char '\b') Down _ _) state = handleBackKey state
+-- Key Esc
+handleInput (EventKey (SpecialKey KeyEsc) Down _ _) state = goBack state
 -- Key 'r' / 'R'
 handleInput (EventKey (Char 'r') Down _ _) state =
   case currentScreen state of
@@ -91,6 +96,9 @@ handleInput (EventKey (Char 'R') Down _ _) state =
   case currentScreen state of
     TeamSelect -> handleRandomTeam state
     _ -> state
+-- Texto en pantalla multijugador
+handleInput (EventKey (Char c) Down _ _) state
+  | currentScreen state == Multiplayer = handleMultiplayerChar c state
 -- Cualquier otra tecla
 handleInput (EventKey _ Down _ _) state =
   case currentScreen state of
@@ -122,6 +130,7 @@ moveUp :: GameState -> GameState
 moveUp state = case currentScreen state of
   StartScreen -> state {currentScreen = Menu}
   Menu -> state {selectedOption = max 0 (selectedOption state - 1)}
+  Multiplayer -> state {multiplayerRow = max 0 (multiplayerRow state - 1)}
   Pokedex -> state {selectedPokemon = max 1 (selectedPokemon state - 1)}
   TeamSelect -> state {selectedPokemon = max 1 (selectedPokemon state - 1)}
   OpponentSelect -> state {selectedTrainerIndex = max 0 (selectedTrainerIndex state - 1)}
@@ -135,6 +144,7 @@ moveDown :: GameState -> GameState
 moveDown state = case currentScreen state of
   StartScreen -> state {currentScreen = Menu}
   Menu -> state {selectedOption = min 2 (selectedOption state + 1)}
+  Multiplayer -> state {multiplayerRow = min 3 (multiplayerRow state + 1)}
   Pokedex -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
   TeamSelect -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
   OpponentSelect -> state {selectedTrainerIndex = min (length allTrainers - 1) (selectedTrainerIndex state + 1)}
@@ -150,6 +160,17 @@ moveDown state = case currentScreen state of
 
 handleBackKey :: GameState -> GameState
 handleBackKey state = case currentScreen state of
+  Multiplayer ->
+    case multiplayerRow state of
+      0 ->
+        if null (multiplayerHost state)
+          then goBack state
+          else state {multiplayerHost = init (multiplayerHost state)}
+      1 ->
+        if null (multiplayerPort state)
+          then state {multiplayerRow = 0}
+          else state {multiplayerPort = init (multiplayerPort state)}
+      _ -> goBack state
   TeamSelect ->
     if null (playerTeam state)
       then goBack state
@@ -169,7 +190,13 @@ goBack state = case currentScreen state of
   Menu -> state
   PokemonDetail -> state {currentScreen = Pokedex}
   Pokedex -> state {currentScreen = Menu, selectedOption = 0}
-  Multiplayer -> state {currentScreen = Menu, selectedOption = 0}
+  Multiplayer ->
+    state
+      { currentScreen = Menu,
+        selectedOption = 0,
+        multiplayerError = Nothing,
+        multiplayerPending = Nothing
+      }
   TeamSelect -> state {currentScreen = Menu, selectedOption = 0, playerTeam = []}
   OpponentSelect -> state {currentScreen = TeamSelect}
   BattleScreen -> state
@@ -240,3 +267,49 @@ generateUniqueRandom :: Int -> StdGen -> (Int, StdGen)
 generateUniqueRandom maxIdx gen =
   let (r, nextGen) = randomR (1, maxIdx) gen
    in (r, nextGen)
+
+--------------------------------------------------------------------------------
+-- MULTIJUGADOR P2P (campos host/puerto y acciones)
+--------------------------------------------------------------------------------
+
+parsePortStr :: String -> Maybe PortNumber
+parsePortStr s
+  | null s = Nothing
+  | otherwise = case readMaybe s :: Maybe Int of
+      Just n | n >= 1 && n <= 65535 -> Just (fromIntegral n :: PortNumber)
+      _ -> Nothing
+
+handleMultiplayerChar :: Char -> GameState -> GameState
+handleMultiplayerChar c state =
+  case multiplayerRow state of
+    0 ->
+      if isHostChar c
+        then state {multiplayerHost = multiplayerHost state ++ [c], multiplayerError = Nothing}
+        else state
+    1 ->
+      if isDigit c
+        then state {multiplayerPort = multiplayerPort state ++ [c], multiplayerError = Nothing}
+        else state
+    _ -> state
+
+isHostChar :: Char -> Bool
+isHostChar c = isAlphaNum c || c `elem` (".-_" :: String)
+
+handleMultiplayerEnter :: GameState -> GameState
+handleMultiplayerEnter state =
+  case multiplayerRow state of
+    0 -> state {multiplayerRow = 1}
+    1 -> state {multiplayerRow = 2}
+    2 ->
+      case parsePortStr (multiplayerPort state) of
+        Nothing -> state {multiplayerError = Just "Puerto invalido (1-65535)."}
+        Just p -> state {multiplayerPending = Just (MPListen p), multiplayerError = Nothing}
+    3 ->
+      case parsePortStr (multiplayerPort state) of
+        Nothing -> state {multiplayerError = Just "Puerto invalido (1-65535)."}
+        Just p ->
+          let h = multiplayerHost state
+           in if null h
+                then state {multiplayerError = Just "Indica un host."}
+                else state {multiplayerPending = Just (MPConnect h p), multiplayerError = Nothing}
+    _ -> state
