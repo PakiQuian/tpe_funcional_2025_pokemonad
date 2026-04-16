@@ -342,9 +342,9 @@ submitSelectedMove state =
           (nextBattle, nextRng) = submitPlayerAction (rngSeed state) bState action
        in state
             { battleState = Just nextBattle,
+              rngSeed = nextRng,
               battleMenuType = MainBattleMenu,
-              battleMoveIndex = 0,
-              rngSeed = nextRng
+              battleMoveIndex = 0
             }
 
 submitSelectedSwitch :: GameState -> GameState
@@ -356,9 +356,9 @@ submitSelectedSwitch state =
           (nextBattle, nextRng) = submitPlayerAction (rngSeed state) bState action
        in state
             { battleState = Just nextBattle,
+              rngSeed = nextRng,
               battleMenuType = MainBattleMenu,
-              battleMoveIndex = 0,
-              rngSeed = nextRng
+              battleMoveIndex = 0
             }
 
 --------------------------------------------------------------------------------

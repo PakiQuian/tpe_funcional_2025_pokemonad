@@ -157,7 +157,7 @@ allPokemon =
         pDescription = "Often found in forests, eating leaves.",
         frontSprite = "game-client/assets/pokemon/0013_front.png",
         backSprite = "game-client/assets/pokemon/0013_back.png",
-        pMoves = map getMoveByName ["String Shot", "Posion Sting"]
+        pMoves = map getMoveByName ["String Shot", "Poison Sting"]
       },
     Pokemon
       { pId = 14,
@@ -167,7 +167,7 @@ allPokemon =
         pDescription = "Almost incapable of moving, this Pokemon can only harden its shell.",
         frontSprite = "game-client/assets/pokemon/0014_front.png",
         backSprite = "game-client/assets/pokemon/0014_back.png",
-        pMoves = map getMoveByName ["String Shot", "Posion Sting"]
+        pMoves = map getMoveByName ["String Shot", "Poison Sting"]
       },
     Pokemon
       { pId = 15,
@@ -1527,7 +1527,7 @@ allPokemon =
         pDescription = "Capable of copying an enemy's genetic code.",
         frontSprite = "game-client/assets/pokemon/0132_front.png",
         backSprite = "game-client/assets/pokemon/0132_back.png",
-        pMoves = map getMoveByName ["Transform"]
+        pMoves = [getMoveByName "Transform"]
       },
     -- ==========================================
     -- EEVEE LINE
@@ -1738,7 +1738,7 @@ allPokemon =
         pDescription = "So rare that it is still said to be a mirage.",
         frontSprite = "game-client/assets/pokemon/0151_front.png",
         backSprite = "game-client/assets/pokemon/0151_back.png",
-        pMoves = map getMoveByName ["Psychic", "Metronome", "Mega Punch", " Flash"]
+        pMoves = map getMoveByName ["Psychic", "Metronome", "Mega Punch", "Flash"]
       }
   ]
 

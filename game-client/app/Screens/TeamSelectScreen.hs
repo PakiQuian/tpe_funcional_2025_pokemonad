@@ -73,12 +73,12 @@ drawSlots team spriteMap =
   pictures
     [ -- Fila 1 (Arriba) - Subimos de 80 a 100
       drawTeamSlot spriteMap team 0 (-110) 100,
-      drawTeamSlot spriteMap team 1 (110) 100,
+      drawTeamSlot spriteMap team 1 110 100,
       -- Fila 2 (Medio) - Subimos de -40 a -20
       drawTeamSlot spriteMap team 2 (-110) (-20),
-      drawTeamSlot spriteMap team 3 (110) (-20),
+      drawTeamSlot spriteMap team 3 110 (-20),
       drawTeamSlot spriteMap team 4 (-110) (-140),
-      drawTeamSlot spriteMap team 5 (110) (-140)
+      drawTeamSlot spriteMap team 5 110 (-140)
     ]
 
 -- Dibuja un slot individual en una posición específica (X, Y)

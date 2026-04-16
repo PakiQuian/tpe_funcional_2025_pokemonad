@@ -36,3 +36,9 @@ data Stats = Stats
     speed :: Int
   }
   deriving (Show, Eq)
+
+-- ==========================================
+-- ESTADO DE BATALLA
+-- ==========================================
+data Status = Healthy | Fainted | Paralyzed | Burned | Frozen | Asleep | Poisoned
+  deriving (Show, Eq)

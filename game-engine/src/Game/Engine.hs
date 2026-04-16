@@ -19,7 +19,7 @@ import Game.Battle
     initBattle,
   )
 import Game.Trainer (Trainer)
-import System.Random (StdGen)
+import System.Random (StdGen, split)
 
 initBattleEngine :: [Int] -> Trainer -> BattleState
 initBattleEngine = initBattle
@@ -27,5 +27,5 @@ initBattleEngine = initBattle
 submitPlayerAction :: StdGen -> BattleState -> BattleAction -> (BattleState, StdGen)
 submitPlayerAction rng bState playerAction =
   let (enemyAction, rngAfterAI) = chooseEnemyAction rng (enemyDifficulty bState) bState
-      nextBattleState = executeTurn bState playerAction enemyAction
-   in (nextBattleState, rngAfterAI)
+      (finalBattleState, finalRng) = executeTurn rngAfterAI bState playerAction enemyAction
+   in (finalBattleState, finalRng)

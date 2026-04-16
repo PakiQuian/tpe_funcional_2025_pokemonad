@@ -33,7 +33,7 @@ import Screens.PokedexScreen (drawPokedexScreen)
 import Screens.PokemonScreen (drawPokemonScreen)
 import Screens.StartScreen (drawStartScreen)
 import Screens.TeamSelectScreen (drawTeamSelectScreen)
-import System.Random (StdGen, getStdGen)
+import System.Random (StdGen, initStdGen)
 
 --------------------------------------------------------------------------------
 -- MODELO DE DATOS (ESTADO)
@@ -201,7 +201,7 @@ main = do
 
   putStrLn $ "Se cargaron " ++ show (length trainerSpriteList) ++ " entrenadores."
 
-  rng <- getStdGen
+  rng <- initStdGen
 
   putStrLn "Iniciando Ventana..."
 
