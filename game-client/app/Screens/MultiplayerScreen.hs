@@ -15,49 +15,72 @@ import Graphics.Gloss
     text,
     translate,
     white,
+    rectangleWire,
   )
 
--- | Pantalla P2P alineada con Menu / TeamSelect: fondo, logo, caja y tipografía.
+-- | P2P screen aligned with Menu / TeamSelect: background, logo, panel, and typography.
 drawMultiplayerScreen :: Picture -> Picture -> GameState -> NetSubState -> Picture
 drawMultiplayerScreen menuBgImage logoImage gs netSt =
   pictures
     [ menuBgImage,
       drawLogo logoImage,
-      translate 0 (-35) $ drawMainPanel gs netSt,
-      drawFooter,
-      translate 0 (-278) $ maybe blank drawErrorBanner (multiplayerError gs)
+      translate 0 0 $ drawMainPanel gs netSt,
+      drawFooter
     ]
 
--- Caja principal (mismo patrón borde blanco + interior azul que el menú).
+-- Main panel (same white border + blue interior pattern as the menu).
 drawMainPanel :: GameState -> NetSubState -> Picture
 drawMainPanel gs netSt =
   let row = multiplayerRow gs
       hostStr = multiplayerHost gs
       portStr = multiplayerPort gs
       netLine = netStatusLine netSt
+      errLine = multiplayerError gs
    in pictures
-        [ color white $ rectangleSolid 720 400,
-          color pokemonBlue $ rectangleSolid 700 380,
-          drawTextWithShadow "MULTIJUGADOR P2P" 0.2 155 white,
-          drawTextWithShadow "TCP — Host o cliente" 0.12 115 (makeColorI 200 220 255 255),
-          drawFieldRow row 0 45 "HOST" hostStr,
-          drawFieldRow row 1 (-25) "PUERTO" portStr,
-          drawActionRow row 2 (-95) "ESCUCHAR EN ESTE PUERTO (SER HOST)",
-          drawActionRow row 3 (-165) "CONECTAR AL HOST INDICADO",
-          if null netLine
-            then blank
-            else drawTextWithShadow netLine 0.11 (-228) (makeColorI 180 230 255 255)
+        [ color white $ rectangleSolid 720 320,
+          color pokemonBlue $ rectangleSolid 700 300,
+          drawTextWithShadow "P2P MULTIPLAYER" 0.2 95 white,
+          drawTextWithShadow "TCP - Host or Client" 0.12 55 (makeColorI 200 220 255 255),
+          drawFieldRow row 0 10 "HOST" hostStr,
+          drawFieldRow row 1 (-30) "PORT" portStr,
+          drawActionRow row 2 (-70) "LISTEN ON THIS PORT (HOST)",
+          drawActionRow row 3 (-110) "CONNECT TO PROVIDED HOST",
+          drawNetStatusBox netLine errLine
         ]
 
 netStatusLine :: NetSubState -> String
 netStatusLine netSt = case netSt of
-  NetDisconnected -> ""
-  NetListening p -> "Estado: escuchando en puerto " ++ show p ++ " (esperando peer)…"
-  NetConnecting h p -> "Estado: conectando a " ++ h ++ ":" ++ show p ++ "…"
-  NetInLobby -> "Estado: conectado (lobby)."
-  NetInBattle -> "Estado: batalla P2P."
+  NetDisconnected -> "Status: disconnected"
+  NetListening p -> "Status: listening on " ++ show p
+  NetConnecting h p -> "Status: connecting to " ++ h ++ ":" ++ show p
+  NetInLobby -> "Status: connected (lobby)"
+  NetInBattle -> "Status: connected (battle)"
 
--- | Fila con etiqueta + valor (host / puerto).
+drawNetStatusBox :: String -> Maybe String -> Picture
+drawNetStatusBox netLine maybeErr =
+  let rawLine = case maybeErr of
+        Just err -> "Error: " ++ err
+        Nothing -> netLine
+      line = clipText 64 rawLine
+      lineColor = case maybeErr of
+        Just _ -> makeColorI 255 210 210 255
+        Nothing -> white
+   in pictures
+        [ translate 0 (-220) $ color (makeColorI 0 0 0 165) $ rectangleSolid 640 44,
+          translate 0 (-220) $ color (makeColorI 170 215 255 255) $ rectangleWire 640 44,
+          translate (-260) (-227) $
+            scale 0.11 0.11 $
+              color lineColor $
+                text line
+        ]
+
+clipText :: Int -> String -> String
+clipText maxLen s
+  | length s <= maxLen = s
+  | maxLen <= 1 = take maxLen s
+  | otherwise = take (maxLen - 1) s ++ "…"
+
+-- | Row with label + value (host / port).
 drawFieldRow :: Int -> Int -> Float -> String -> String -> Picture
 drawFieldRow currentRow idx yBase label val =
   let sel = currentRow == idx
@@ -79,7 +102,7 @@ drawFieldRow currentRow idx yBase label val =
           else blank
    in pictures [cursor, line]
 
--- | Fila de acción (solo texto descriptivo).
+-- | Action row (descriptive text only).
 drawActionRow :: Int -> Int -> Float -> String -> Picture
 drawActionRow currentRow idx yBase label =
   let sel = currentRow == idx
@@ -95,7 +118,7 @@ drawActionRow currentRow idx yBase label =
               text label
    in pictures [cursor, txt]
 
--- | Barra inferior como TeamSelect (fondo oscuro semitransparente + texto con sombra).
+-- | Bottom footer similar to TeamSelect (dark semi-transparent background + shadowed text).
 drawFooter :: Picture
 drawFooter =
   pictures
@@ -103,21 +126,9 @@ drawFooter =
         color (makeColorI 0 0 0 200) $
           rectangleSolid 1280 52,
       drawTextWithShadow
-        "ENTER: confirmar fila  |  ARRIBA/ABAJO: mover  |  ESC: volver al menu"
+        "ENTER: Confirm row  |  UP/DOWN: Move  |  ESC: Back to menu"
         0.13
         (-327)
         white
     ]
 
--- | Banner de error debajo de la caja principal (borde claro + interior rojo oscuro).
-drawErrorBanner :: String -> Picture
-drawErrorBanner err =
-  let msg = if length err > 72 then take 69 err ++ "…" else err
-   in pictures
-        [ color white $ rectangleSolid 620 58,
-          color (makeColorI 40 12 12 255) $ rectangleSolid 602 44,
-          translate 0 24 $
-            color (makeColorI 255 100 100 255) $
-              rectangleSolid 598 4,
-          drawTextWithShadow ("!  " ++ msg) 0.12 0 (makeColorI 255 210 210 255)
-        ]
