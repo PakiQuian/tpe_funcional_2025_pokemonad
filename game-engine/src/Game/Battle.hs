@@ -2,7 +2,7 @@ module Game.Battle where
 
 import Game.Move (Move (..), getMoveByName)
 import Game.Pokemon (Pokemon (..), getPokemonById)
-import Game.Trainer (Trainer (..))
+import Game.Trainer (AIDifficulty, Trainer (..))
 import Game.Types (PokemonType (..), Stats (..))
 
 -- ==========================================
@@ -33,11 +33,17 @@ data BattlePhase
 data Winner = PlayerWon | EnemyWon
   deriving (Show, Eq)
 
+data BattleAction
+  = ActionMove Int
+  | ActionSwitch Int
+  deriving (Show, Eq)
+
 data BattleState = BattleState
   { playerActive :: BattlePokemon,
     playerBench :: [BattlePokemon],
     enemyActive :: BattlePokemon,
     enemyBench :: [BattlePokemon],
+    enemyDifficulty :: AIDifficulty,
     turnCount :: Int,
     phase :: BattlePhase,
     battleLog :: [String]
@@ -56,6 +62,7 @@ initBattle playerTeamIds enemyTrainer =
           playerBench = tail pTeam,
           enemyActive = head eTeam,
           enemyBench = tail eTeam,
+          enemyDifficulty = tDifficulty enemyTrainer,
           turnCount = 1,
           phase = WaitingForCommand,
           battleLog = ["Battle started! Trainer " ++ tName enemyTrainer ++ " wants to battle!"]
@@ -83,3 +90,17 @@ makeBattlePokemon pid =
 calculateHp :: Int -> Int -> Int
 calculateHp baseStat level =
   (((baseStat + 31) * 2 * level) `div` 100) + level + 10
+
+executeTurn :: BattleState -> BattleAction -> BattleAction -> BattleState
+executeTurn bState playerAction enemyAction =
+  let inTurn = bState {phase = TurnExecution}
+      -- TODO: Resolver orden de acciones, cambios, daño, KOs y fin de batalla usando Game.Logic.
+      newLog =
+        battleLog inTurn
+          ++ [ "TODO turn resolution | player=" ++ show playerAction ++ " enemy=" ++ show enemyAction
+             ]
+   in inTurn
+        { phase = WaitingForCommand,
+          turnCount = turnCount inTurn + 1,
+          battleLog = newLog
+        }

@@ -1,0 +1,8 @@
+cradle:
+  cabal:
+    - path: "./game-client/app"
+      component: "exe:pokemonad"
+    - path: "./game-engine/src"
+      component: "lib:game-engine"
+    - path: "./p2p-net/src"
+      component: "lib:p2p-net"

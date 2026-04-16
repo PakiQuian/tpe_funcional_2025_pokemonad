@@ -1,11 +1,11 @@
 module Main where
 
 import Control.Concurrent (forkIO)
-import Control.Monad (void)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TQueue (newTQueueIO)
 import Control.Concurrent.STM.TVar (newTVarIO, writeTVar)
 import Control.Exception (SomeException, try)
+import Control.Monad (void)
 import qualified Data.Map as Map
 import Engine.Common (loadPngSafe)
 import Engine.GameState (BattleMenuType (..), GameState (..), MultiplayerIntent (..), Screen (..))
@@ -18,13 +18,13 @@ import Engine.World
     drainNetInbox,
     mergeNetAsync,
   )
-import Network.Socket (HostName, PortNumber, SockAddr, Socket)
-import P2P.Communication (connectTo, forkRecvLoop, listenAndAccept)
 import Game.Pokemon (Pokemon (..), allPokemon)
 import Game.Trainer (Trainer (..), allTrainers)
 import Graphics.Gloss (Display (InWindow), Picture, black, loadBMP)
 import Graphics.Gloss.Interface.IO.Game (playIO)
 import Graphics.Gloss.Interface.Pure.Game (Event)
+import Network.Socket (HostName, PortNumber, SockAddr, Socket)
+import P2P.Communication (connectTo, forkRecvLoop, listenAndAccept)
 import Screens.BattleScreen (drawBattleScreen)
 import Screens.MenuScreen (drawMenuScreen)
 import Screens.MultiplayerScreen (drawMultiplayerScreen)
@@ -63,6 +63,7 @@ initialState startBg menuBg logo pokemonFrontSprites pokemonBackSprites trainerS
       scrollTimer = 0.0,
       battleMenuType = MainBattleMenu,
       battleMoveIndex = 0,
+      battleBenchIndex = 0,
       multiplayerHost = "127.0.0.1",
       multiplayerPort = "7878",
       multiplayerRow = 0,
@@ -86,7 +87,7 @@ draw state netSt = case currentScreen state of
   Multiplayer -> drawMultiplayerScreen (menuBgImage state) (logoImage state) state netSt
   TeamSelect -> drawTeamSelectScreen (menuBgImage state) (logoImage state) (selectedPokemon state) (playerTeam state) (pokemonFrontSprites state)
   OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state) (pokemonFrontSprites state) (trainerSprites state)
-  BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state) (battleMenuIndex state) (battleMenuType state) (battleMoveIndex state)
+  BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state) (battleMenuIndex state) (battleMenuType state) (battleMoveIndex state) (battleBenchIndex state)
 
 drawWorld :: World -> IO Picture
 drawWorld w = pure $ draw (worldGame w) (netSubState w)

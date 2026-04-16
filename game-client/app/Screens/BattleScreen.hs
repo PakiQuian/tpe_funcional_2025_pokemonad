@@ -24,8 +24,8 @@ import Graphics.Gloss
   )
 
 -- Dibuja la pantalla de batalla
-drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map Int Picture -> Map.Map Int Picture -> Int -> BattleMenuType -> Int -> Picture
-drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackSprites menuIndex menuType moveIndex =
+drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map Int Picture -> Map.Map Int Picture -> Int -> BattleMenuType -> Int -> Int -> Picture
+drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackSprites menuIndex menuType moveIndex benchIndex =
   let bg =
         if null backgrounds
           then blank
@@ -37,8 +37,38 @@ drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackS
             [ bg,
               drawEnemyUnit (enemyActive state) pokemonFrontSprites,
               drawPlayerUnit (playerActive state) pokemonBackSprites,
-              drawBattleMenu (playerActive state) menuIndex menuType moveIndex
+              drawBattleLogWindow (battleLog state),
+              drawBattleMenu (playerActive state) (playerBench state) menuIndex menuType moveIndex benchIndex
             ]
+
+drawBattleLogWindow :: [String] -> Picture
+drawBattleLogWindow logs =
+  let boxW = 560
+      boxH = 220
+      maxLines = 8
+      shownLogs = map (take 62) (takeLast maxLines logs)
+      lineStep = 23
+      title = translate (-255) 85 $ scale 0.14 0.14 $ color white $ text "BATTLE LOG"
+      linePictures =
+        zipWith
+          ( \idx ln ->
+              translate (-255) (58 - fromIntegral idx * lineStep) $
+                scale 0.12 0.12 $
+                  color white $
+                    text ln
+          )
+          [0 :: Int ..]
+          shownLogs
+   in translate (-330) 220 $
+        pictures
+          [ color (makeColorI 0 0 0 190) $ rectangleSolid boxW boxH,
+            color white $ rectangleWire boxW boxH,
+            title,
+            pictures linePictures
+          ]
+
+takeLast :: Int -> [a] -> [a]
+takeLast n xs = drop (length xs - min n (length xs)) xs
 
 -- ===============================================================
 -- DIBUJO DE UNIDADES
@@ -51,17 +81,19 @@ drawEnemyUnit bp spriteMap =
       [ case Map.lookup (pId (bpOriginal bp)) spriteMap of
           Just pic -> scale 2.5 2.5 pic
           Nothing -> scale 0.2 0.2 $ text "?",
-        translate (-230) 80 $ drawHUD bp
+        translate (-220) 80 $ drawHUD bp
       ]
 
 drawPlayerUnit :: BattlePokemon -> Map.Map Int Picture -> Picture
 drawPlayerUnit bp spriteMap =
   translate (-210) (-105) $
     pictures
-      [ case Map.lookup (pId (bpOriginal bp)) spriteMap of
+      [ -- Sprite del Jugador (Back Sprite)
+        case Map.lookup (pId (bpOriginal bp)) spriteMap of
           Just pic -> scale 4.5 4.5 pic
           Nothing -> scale 0.2 0.2 $ text "?",
-        translate (-230) 80 $ drawHUD bp
+        -- HUD Jugador - Un poco a la derecha
+        translate (-220) 80 $ drawHUD bp
       ]
 
 -- ===============================================================
@@ -93,14 +125,14 @@ drawHUD bp =
 -- DIRECTOR DEL MENÚ DE BATALLA
 -- ===============================================================
 
-drawBattleMenu :: BattlePokemon -> Int -> BattleMenuType -> Int -> Picture
-drawBattleMenu activePokemon menuIdx menuType moveIdx = translate 0 (-280) $
+drawBattleMenu :: BattlePokemon -> [BattlePokemon] -> Int -> BattleMenuType -> Int -> Int -> Picture
+drawBattleMenu activePokemon bench menuIdx menuType moveIdx benchIdx = translate 0 (-280) $
   case menuType of
     MainBattleMenu -> drawMainMenu activePokemon menuIdx
     FightMenu -> drawFightMenu activePokemon moveIdx
-    BagMenu -> drawTextWithShadow "BAG MENU (Not Implemented)" 0.2 0 white
-    PokemonMenu -> drawTextWithShadow "POKEMON MENU (Not Implemented)" 0.2 0 white
     QuitConfirmMenu -> drawQuitMenu moveIdx
+    PokemonMenu -> drawPokemonMenu bench benchIdx
+    SwitchConfirmMenu -> drawSwitchConfirmMenu bench benchIdx moveIdx
 
 -- ===============================================================
 -- MENÚ PRINCIPAL (What will PKMN do?)
@@ -135,9 +167,11 @@ drawFightMenu activePokemon moveIdx =
   let moves = bpMoves activePokemon
       selectedMove = if moveIdx < length moves then Just (moves !! moveIdx) else Nothing
    in pictures
-        [ translate (-200) 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 880 160,
+        [ -- CAJA IZQUIERDA (Los 4 ataques)
+          translate (-200) 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 880 160,
           translate (-200) 0 $ color white $ rectangleWire 870 150,
           translate (-200) 0 $ drawMovesGrid moves moveIdx,
+          -- CAJA DERECHA (PP y Tipo)
           translate 450 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 380 160,
           translate 450 0 $ color white $ rectangleWire 370 150,
           translate 450 0 $ drawMoveDetails selectedMove
@@ -171,12 +205,80 @@ drawMoveDetails (Just move) =
     ]
 
 -- ===============================================================
--- MENÚ DE BAG
+-- 4. MENÚ DE EQUIPO (POKEMON MENU)
 -- ===============================================================
+drawPokemonMenu :: [BattlePokemon] -> Int -> Picture
+drawPokemonMenu bench benchIdx =
+  pictures
+    [ -- Caja Principal
+      color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+      color white $ rectangleWire 1270 150,
+      -- Título
+      translate (-580) 20 $ scale 0.2 0.2 $ color white $ text "Choose a POKEMON.",
+      -- Lista de Pokémon en la banca
+      translate (-200) 40 $ pictures $ zipWith (drawBenchSlot benchIdx) [0 ..] bench
+    ]
+
+drawBenchSlot :: Int -> Int -> BattlePokemon -> Picture
+drawBenchSlot selectedIndex index bp =
+  let isSelected = index == selectedIndex
+      txtColor = if isSelected then white else makeColorI 180 180 180 255
+
+      -- Formato: "Pikachu   HP: 35/35"
+      nameStr = pName (bpOriginal bp)
+      hpStr = "HP: " ++ show (bpHp bp) ++ "/" ++ show (bpMaxHp bp)
+
+      -- Posicionamiento en cuadrícula (2 columnas)
+      xPos = if even index then 0 else 400
+      yPos
+        | index < 2 = 0
+        | index < 4 = -40
+        | otherwise = -80
+
+      txt = translate xPos yPos $ scale 0.18 0.18 $ color txtColor $ text (nameStr ++ "   " ++ hpStr)
+      cursor =
+        if isSelected
+          then translate (xPos - 25) (yPos + 5) $ color pokemonYellow $ polygon [(0, 0), (0, 15), (12, 7.5)]
+          else blank
+   in pictures [cursor, txt]
 
 -- ===============================================================
--- MENÚ DE POKEMON
+-- 5. CONFIRMACIÓN DE CAMBIO (SWITCH)
 -- ===============================================================
+drawSwitchConfirmMenu :: [BattlePokemon] -> Int -> Int -> Picture
+drawSwitchConfirmMenu bench benchIdx moveIdx =
+  if benchIdx >= 0 && benchIdx < length bench
+    then
+      let targetPokemon = bench !! benchIdx
+       in pictures
+            [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+              color white $ rectangleWire 1270 150,
+              -- Pregunta
+              translate (-580) 20 $
+                scale 0.25 0.25 $
+                  color white $
+                    text ("Switch to " ++ pName (bpOriginal targetPokemon) ++ "?"),
+              -- Opciones YES / NO (Reutilizamos moveIdx para elegir YES=0, NO=1)
+              translate 350 0 $
+                pictures
+                  [ drawMenuOption 0 "SWITCH" (-120) 0 moveIdx,
+                    drawMenuOption 1 "CANCEL" 100 0 moveIdx
+                  ]
+            ]
+    else
+      pictures
+        [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+          color white $ rectangleWire 1270 150,
+          translate (-580) 20 $
+            scale 0.25 0.25 $
+              color white $
+                text "Invalid Pokemon selection.",
+          translate 350 0 $
+            pictures
+              [ drawMenuOption 0 "SWITCH" (-120) 0 moveIdx,
+                drawMenuOption 1 "CANCEL" 100 0 moveIdx
+              ]
+        ]
 
 -- ===============================================================
 -- MENÚ DE CONFIRMACIÓN (QUIT)

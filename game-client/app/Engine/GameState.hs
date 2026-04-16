@@ -30,7 +30,7 @@ data Screen
   | BattleScreen
   deriving (Show, Eq)
 
-data BattleMenuType = MainBattleMenu | FightMenu | BagMenu | PokemonMenu | QuitConfirmMenu
+data BattleMenuType = MainBattleMenu | FightMenu | BagMenu | PokemonMenu | SwitchConfirmMenu | QuitConfirmMenu
   deriving (Show, Eq)
 
 data GameState = GameState
@@ -59,6 +59,7 @@ data GameState = GameState
     -- Campos para el submenu
     battleMenuType :: BattleMenuType,
     battleMoveIndex :: Int,
+    battleBenchIndex :: Int,
     -- Multijugador P2P (host / puerto / acciones)
     multiplayerHost :: String,
     multiplayerPort :: String,

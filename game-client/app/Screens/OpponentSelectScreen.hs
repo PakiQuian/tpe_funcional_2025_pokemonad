@@ -2,7 +2,7 @@ module Screens.OpponentSelectScreen (drawOpponentSelectScreen) where
 
 import qualified Data.Map as Map
 import Engine.Common (drawCenteredText, drawLogo, drawTextWithShadow, pokemonBlue, pokemonYellow)
-import Game.Trainer (Trainer (..), allTrainers)
+import Game.Trainer (AIDifficulty (..), Trainer (..), allTrainers)
 import Graphics.Gloss
   ( Picture,
     blank,
@@ -94,13 +94,11 @@ drawTrainerList selectedIndex = pictures $ zipWith drawTrainerEntry visibleTrain
                   text (difficultyStars (tDifficulty trainer))
        in pictures [cursor, txtName, stars]
 
-difficultyStars :: Float -> String
-difficultyStars diff
-  | diff >= 1.5 = "*****"
-  | diff >= 1.3 = "****"
-  | diff >= 1.1 = "***"
-  | diff >= 0.9 = "**"
-  | otherwise = "*"
+difficultyStars :: AIDifficulty -> String
+difficultyStars DifficultyEasy = "**"
+difficultyStars DifficultyMedium = "***"
+difficultyStars DifficultyHard = "*****"
+difficultyStars DifficultyExtreme = "*******"
 
 -- ============================================
 -- PREVIEW DEL ENTRENADOR (DERECHA)
