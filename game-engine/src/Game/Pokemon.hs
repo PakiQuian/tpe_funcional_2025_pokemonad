@@ -81,7 +81,7 @@ allPokemon =
         pDescription = "Spits fire that is hot enough to melt boulders.",
         frontSprite = "game-client/assets/pokemon/0006_front.png",
         backSprite = "game-client/assets/pokemon/0006_back.png",
-        pMoves = map getMoveByName ["Fly", "Sword Dance", "Fire Spin", "Fire Blast"]
+        pMoves = map getMoveByName ["Fly", "Swords Dance", "Fire Spin", "Fire Blast"]
       },
     -- ==========================================
     -- STARTERS KANTO (Water)
@@ -200,7 +200,7 @@ allPokemon =
         pDescription = "Very protective of its sprawling territorial area.",
         frontSprite = "game-client/assets/pokemon/0017_front.png",
         backSprite = "game-client/assets/pokemon/0017_back.png",
-        pMoves = map getMoveByName ["Fly", "Quick Attack", "Sand-attack", "Takedown"]
+        pMoves = map getMoveByName ["Fly", "Quick Attack", "Sand-attack", "Take Down"]
       },
     Pokemon
       { pId = 18,

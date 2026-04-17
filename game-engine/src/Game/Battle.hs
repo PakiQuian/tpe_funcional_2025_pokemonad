@@ -1,5 +1,6 @@
 module Game.Battle where
 
+import Data.List (findIndex)
 import Game.Logic
   ( canAttack,
     doesMoveHit,
@@ -32,6 +33,7 @@ data BattlePokemon = BattlePokemon
 data BattlePhase
   = WaitingForCommand
   | TurnExecution
+  | WaitingForForcedPlayerSwitch
   | BattleEnded Winner
   deriving (Show, Eq)
 
@@ -101,8 +103,10 @@ calculateHp baseStat level =
 -- ===============================================================
 -- ALGORITMO ACTUAL:
 -- Fase 1: Pre-resolución
---   - Determina orden de ataque basado en Speed stat
---   - Sin cambios de pokémon (TODO)
+--   - Si hay ActionSwitch (jugador o rival), el cambio tiene prioridad absoluta.
+--   - Si hay switch + ataque, primero se realiza el switch y luego el ataque pega al nuevo activo.
+--   - Si ambos hacen switch, se realizan ambos cambios y no hay ataques ese turno.
+--   - Si no hay switches, el orden de ataques se determina por Speed.
 -- Fase 2: Primer atacante ejecuta su movimiento
 --   - Chequea estado alterado (Asleep, Frozen, etc.)
 --   - Chequea precisión del movimiento
@@ -115,33 +119,73 @@ calculateHp baseStat level =
 
 executeTurn :: StdGen -> BattleState -> BattleAction -> BattleAction -> (BattleState, StdGen)
 executeTurn rng bState playerAction enemyAction =
-  let inTurn = bState {phase = TurnExecution}
-      -- Determinar quién ataca primero basado en velocidad
-      playerSpeed = speed (pStats (bpOriginal (playerActive inTurn)))
-      enemySpeed = speed (pStats (bpOriginal (enemyActive inTurn)))
-      playerFirst = playerSpeed > enemySpeed
+  case phase bState of
+    BattleEnded _ -> (bState, rng)
+    WaitingForForcedPlayerSwitch ->
+      case playerAction of
+        ActionSwitch _ ->
+          let (switchedState, switchLogs, nextRng) = applyPlayerAction rng bState playerAction
+              keepForced = bpHp (playerActive switchedState) <= 0
+              phaseAfter = if keepForced then WaitingForForcedPlayerSwitch else WaitingForCommand
+              finalState = switchedState {phase = phaseAfter, battleLog = battleLog switchedState ++ switchLogs}
+           in (finalState, nextRng)
+        _ ->
+          let forcedMsg = "You must switch Pokemon before continuing."
+           in (bState {battleLog = battleLog bState ++ [forcedMsg]}, rng)
+    _ ->
+      let inTurn = bState {phase = TurnExecution}
+          playerDidSwitch = case playerAction of
+            ActionSwitch _ -> True
+            _ -> False
+          enemyDidSwitch = case enemyAction of
+            ActionSwitch _ -> True
+            _ -> False
 
-      -- Aplicar acciones en orden
-      (afterFirst, logFirst, rngAfterFirst) =
-        if playerFirst
-          then applyPlayerAction rng inTurn playerAction
-          else applyEnemyAction rng inTurn enemyAction
+          (afterSecond, logFirst, logSecond, rngAfterSecond)
+            -- Ambos cambian: se resuelven ambos switches y termina el turno
+            | playerDidSwitch && enemyDidSwitch =
+                let (afterPlayerSwitch, playerSwitchLogs, rngAfterPlayerSwitch) = applyPlayerAction rng inTurn playerAction
+                    (afterEnemySwitch, enemySwitchLogs, rngAfterEnemySwitch) = applyEnemyAction rngAfterPlayerSwitch afterPlayerSwitch enemyAction
+                 in (afterEnemySwitch, playerSwitchLogs, enemySwitchLogs, rngAfterEnemySwitch)
+            -- Jugador cambia primero, luego rival ataca al nuevo activo del jugador
+            | playerDidSwitch =
+                let (afterPlayerSwitch, playerSwitchLogs, rngAfterPlayerSwitch) = applyPlayerAction rng inTurn playerAction
+                    (afterEnemyAttack, enemyAttackLogs, rngAfterEnemyAttack) =
+                      if bpHp (enemyActive afterPlayerSwitch) <= 0
+                        then (afterPlayerSwitch, [], rngAfterPlayerSwitch)
+                        else applyEnemyAction rngAfterPlayerSwitch afterPlayerSwitch enemyAction
+                 in (afterEnemyAttack, playerSwitchLogs, enemyAttackLogs, rngAfterEnemyAttack)
+            -- Rival cambia primero, luego jugador ataca al nuevo activo del rival
+            | enemyDidSwitch =
+                let (afterEnemySwitch, enemySwitchLogs, rngAfterEnemySwitch) = applyEnemyAction rng inTurn enemyAction
+                    (afterPlayerAttack, playerAttackLogs, rngAfterPlayerAttack) =
+                      if bpHp (playerActive afterEnemySwitch) <= 0
+                        then (afterEnemySwitch, [], rngAfterEnemySwitch)
+                        else applyPlayerAction rngAfterEnemySwitch afterEnemySwitch playerAction
+                 in (afterPlayerAttack, enemySwitchLogs, playerAttackLogs, rngAfterPlayerAttack)
+            -- Si no hay switches, se mantiene lógica por velocidad
+            | otherwise =
+                let playerSpeed = speed (pStats (bpOriginal (playerActive inTurn)))
+                    enemySpeed = speed (pStats (bpOriginal (enemyActive inTurn)))
+                    playerFirst = playerSpeed > enemySpeed
+                    (afterFirst, firstLogs, rngAfterFirst) =
+                      if playerFirst
+                        then applyPlayerAction rng inTurn playerAction
+                        else applyEnemyAction rng inTurn enemyAction
+                    defenderFainted = (if playerFirst then bpHp (enemyActive afterFirst) else bpHp (playerActive afterFirst)) <= 0
+                    (afterSecondBySpeed, secondLogs, rngAfterSecondBySpeed)
+                      | defenderFainted = (afterFirst, [], rngAfterFirst)
+                      | playerFirst = applyEnemyAction rngAfterFirst afterFirst enemyAction
+                      | otherwise = applyPlayerAction rngAfterFirst afterFirst playerAction
+                 in (afterSecondBySpeed, firstLogs, secondLogs, rngAfterSecondBySpeed)
 
-      -- Chequear si el segundo atacante está debilitado
-      defenderFainted = (if playerFirst then bpHp (enemyActive afterFirst) else bpHp (playerActive afterFirst)) <= 0
-
-      -- Si el defensor no está debilitado, aplicar segundo ataque
-      (afterSecond, logSecond, rngAfterSecond)
-        | defenderFainted = (afterFirst, [], rngAfterFirst)
-        | playerFirst = applyEnemyAction rngAfterFirst afterFirst enemyAction
-        | otherwise = applyPlayerAction rngAfterFirst afterFirst playerAction
-
-      finalState =
-        afterSecond
-          { phase = WaitingForCommand,
-            turnCount = turnCount inTurn + 1
-          }
-   in (finalState {battleLog = battleLog finalState ++ logFirst ++ logSecond}, rngAfterSecond)
+          (resolvedState, postLogs) = resolveTurnAfterDamage afterSecond
+          finalState =
+            resolvedState
+              { turnCount = turnCount inTurn + 1,
+                battleLog = battleLog resolvedState ++ logFirst ++ logSecond ++ postLogs
+              }
+       in (finalState, rngAfterSecond)
 
 -- Aplica la acción del jugador (ataque)
 applyPlayerAction :: StdGen -> BattleState -> BattleAction -> (BattleState, [String], StdGen)
@@ -173,16 +217,19 @@ applyPlayerAction rng bState action = case action of
                         defStat = getDefenseStat selectedMove (pStats (bpOriginal enemyPoke))
                         damageDealt = resolveDamage playerLevel atkStat defStat selectedMove enemyDefType
                         newEnemyHp = max 0 (bpHp enemyPoke - damageDealt)
-                        updatedEnemyPoke = enemyPoke {bpHp = newEnemyHp}
+                        updatedEnemyPoke = updatePokemonAfterDamage enemyPoke newEnemyHp
                         logMsg = pName (bpOriginal playerPoke) ++ " uses " ++ mName selectedMove ++ "! It does " ++ show damageDealt ++ " damage!"
                         -- Chequear si el enemigo quedó debilitado
                         isFainted = newEnemyHp <= 0
                         faintLog = [pName (bpOriginal enemyPoke) ++ " fainted!" | isFainted]
                         newState = bState {enemyActive = updatedEnemyPoke}
                      in (newState, logMsg : faintLog, rngAfterHitCheck)
-  ActionSwitch _ ->
-    -- TODO: Implementar cambios de pokemon
-    (bState, ["Player switch (not yet implemented)"], rng)
+  ActionSwitch benchIdx ->
+    case switchPlayerActive benchIdx bState of
+      Left errMsg -> (bState, [errMsg], rng)
+      Right switchedState ->
+        let switchedName = pName (bpOriginal (playerActive switchedState))
+         in (switchedState, ["Player switched to " ++ switchedName ++ "!"], rng)
 
 -- Aplica la acción del enemigo (ataque)
 applyEnemyAction :: StdGen -> BattleState -> BattleAction -> (BattleState, [String], StdGen)
@@ -214,13 +261,85 @@ applyEnemyAction rng bState action = case action of
                         playerDefType = head (pType (bpOriginal playerPoke))
                         damageDealt = resolveDamage enemyLevel atkStat defStat selectedMove playerDefType
                         newPlayerHp = max 0 (bpHp playerPoke - damageDealt)
-                        updatedPlayerPoke = playerPoke {bpHp = newPlayerHp}
+                        updatedPlayerPoke = updatePokemonAfterDamage playerPoke newPlayerHp
                         logMsg = pName (bpOriginal enemyPoke) ++ " uses " ++ mName selectedMove ++ "! It does " ++ show damageDealt ++ " damage!"
                         -- Chequear si el jugador quedó debilitado
                         isFainted = newPlayerHp <= 0
                         faintLog = ([pName (bpOriginal playerPoke) ++ " fainted!" | isFainted])
                         newState = bState {playerActive = updatedPlayerPoke}
                      in (newState, logMsg : faintLog, rngAfterHitCheck)
-  ActionSwitch _ ->
-    -- TODO: Implementar cambios de pokemon
-    (bState, ["Enemy switch (not yet implemented)"], rng)
+  ActionSwitch benchIdx ->
+    case switchEnemyActive benchIdx bState of
+      Left errMsg -> (bState, [errMsg], rng)
+      Right switchedState ->
+        let switchedName = pName (bpOriginal (enemyActive switchedState))
+         in (switchedState, ["Enemy switched to " ++ switchedName ++ "!"], rng)
+
+resolveTurnAfterDamage :: BattleState -> (BattleState, [String])
+resolveTurnAfterDamage bState
+  | bpHp (enemyActive bState) <= 0 =
+      case firstAliveIndex (enemyBench bState) of
+        Just idx ->
+          case switchEnemyActive idx bState of
+            Right switched ->
+              let switchedName = pName (bpOriginal (enemyActive switched))
+               in continuePlayerCheck switched ["Enemy sent out " ++ switchedName ++ "!"]
+            Left _ -> continuePlayerCheck bState []
+        Nothing ->
+          let ended = bState {phase = BattleEnded PlayerWon}
+           in (ended, ["Enemy has no Pokemon left!"])
+  | otherwise = continuePlayerCheck bState []
+
+continuePlayerCheck :: BattleState -> [String] -> (BattleState, [String])
+continuePlayerCheck bState logs
+  | bpHp (playerActive bState) <= 0 =
+      case firstAliveIndex (playerBench bState) of
+        Just _ -> (bState {phase = WaitingForForcedPlayerSwitch}, logs ++ ["Choose a replacement Pokemon."])
+        Nothing -> (bState {phase = BattleEnded EnemyWon}, logs ++ ["You have no Pokemon left!"])
+  | phase bState == BattleEnded PlayerWon = (bState, logs)
+  | otherwise = (bState {phase = WaitingForCommand}, logs)
+
+firstAliveIndex :: [BattlePokemon] -> Maybe Int
+firstAliveIndex = findIndex isAvailableForSwitch
+
+isAvailableForSwitch :: BattlePokemon -> Bool
+isAvailableForSwitch bp = bpStatus bp /= Fainted
+
+switchPlayerActive :: Int -> BattleState -> Either String BattleState
+switchPlayerActive benchIdx bState =
+  case pickBenchPokemon benchIdx (playerBench bState) of
+    Nothing -> Left "Invalid player switch target."
+    Just (target, remainingBench) ->
+      if not (isAvailableForSwitch target)
+        then Left "That Pokemon cannot be switched in."
+        else
+          let updatedBench = putOutgoingPokemonBackOnBench (playerActive bState) remainingBench
+           in Right bState {playerActive = target, playerBench = updatedBench}
+
+switchEnemyActive :: Int -> BattleState -> Either String BattleState
+switchEnemyActive benchIdx bState =
+  case pickBenchPokemon benchIdx (enemyBench bState) of
+    Nothing -> Left "Invalid enemy switch target."
+    Just (target, remainingBench) ->
+      if not (isAvailableForSwitch target)
+        then Left "Enemy cannot switch to that Pokemon."
+        else
+          let updatedBench = putOutgoingPokemonBackOnBench (enemyActive bState) remainingBench
+           in Right bState {enemyActive = target, enemyBench = updatedBench}
+
+putOutgoingPokemonBackOnBench :: BattlePokemon -> [BattlePokemon] -> [BattlePokemon]
+putOutgoingPokemonBackOnBench outgoing remainingBench =
+  remainingBench ++ [outgoing]
+
+updatePokemonAfterDamage :: BattlePokemon -> Int -> BattlePokemon
+updatePokemonAfterDamage pokemon newHp =
+  let currentStatus = bpStatus pokemon
+      nextStatus = if newHp <= 0 then Fainted else currentStatus
+   in pokemon {bpHp = newHp, bpStatus = nextStatus}
+
+pickBenchPokemon :: Int -> [BattlePokemon] -> Maybe (BattlePokemon, [BattlePokemon])
+pickBenchPokemon idx bench
+  | idx < 0 || idx >= length bench = Nothing
+  | otherwise =
+      let (before, target : after) = splitAt idx bench
+       in Just (target, before ++ after)

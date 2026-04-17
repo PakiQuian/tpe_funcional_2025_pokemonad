@@ -4,7 +4,7 @@ import Data.Char (toUpper)
 import qualified Data.Map as Map
 import Engine.Common (drawTextWithShadow, pokemonBlue, pokemonYellow)
 import Engine.GameState (BattleMenuType (..))
-import Game.Battle (BattlePokemon (..), BattleState (..), bpHp, bpMaxHp, bpOriginal)
+import Game.Battle (BattlePhase (..), BattlePokemon (..), BattleState (..), bpHp, bpMaxHp, bpOriginal)
 import Game.Move (Move (..))
 import Game.Pokemon (Pokemon (..))
 import Graphics.Gloss
@@ -38,7 +38,7 @@ drawBattleScreen backgrounds bgIndex maybeState pokemonFrontSprites pokemonBackS
               drawEnemyUnit (enemyActive state) pokemonFrontSprites,
               drawPlayerUnit (playerActive state) pokemonBackSprites,
               drawBattleLogWindow (battleLog state),
-              drawBattleMenu (playerActive state) (playerBench state) menuIndex menuType moveIndex benchIndex
+              drawBattleMenu (phase state) (playerActive state) (playerBench state) menuIndex menuType moveIndex benchIndex
             ]
 
 drawBattleLogWindow :: [String] -> Picture
@@ -125,14 +125,19 @@ drawHUD bp =
 -- DIRECTOR DEL MENÚ DE BATALLA
 -- ===============================================================
 
-drawBattleMenu :: BattlePokemon -> [BattlePokemon] -> Int -> BattleMenuType -> Int -> Int -> Picture
-drawBattleMenu activePokemon bench menuIdx menuType moveIdx benchIdx = translate 0 (-280) $
-  case menuType of
-    MainBattleMenu -> drawMainMenu activePokemon menuIdx
-    FightMenu -> drawFightMenu activePokemon moveIdx
-    QuitConfirmMenu -> drawQuitMenu moveIdx
-    PokemonMenu -> drawPokemonMenu bench benchIdx
-    SwitchConfirmMenu -> drawSwitchConfirmMenu bench benchIdx moveIdx
+drawBattleMenu :: BattlePhase -> BattlePokemon -> [BattlePokemon] -> Int -> BattleMenuType -> Int -> Int -> Picture
+drawBattleMenu battlePhase activePokemon bench menuIdx menuType moveIdx benchIdx =
+  translate 0 (-280) $
+    if battlePhase == WaitingForForcedPlayerSwitch
+      then case menuType of
+        SwitchConfirmMenu -> drawSwitchConfirmMenu bench benchIdx moveIdx
+        _ -> drawForcedPokemonMenu bench benchIdx
+      else case menuType of
+        MainBattleMenu -> drawMainMenu activePokemon menuIdx
+        FightMenu -> drawFightMenu activePokemon moveIdx
+        QuitConfirmMenu -> drawQuitMenu moveIdx
+        PokemonMenu -> drawPokemonMenu bench benchIdx
+        SwitchConfirmMenu -> drawSwitchConfirmMenu bench benchIdx moveIdx
 
 -- ===============================================================
 -- MENÚ PRINCIPAL (What will PKMN do?)
@@ -219,14 +224,31 @@ drawPokemonMenu bench benchIdx =
       translate (-200) 40 $ pictures $ zipWith (drawBenchSlot benchIdx) [0 ..] bench
     ]
 
+drawForcedPokemonMenu :: [BattlePokemon] -> Int -> Picture
+drawForcedPokemonMenu bench benchIdx =
+  pictures
+    [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+      color white $ rectangleWire 1270 150,
+      translate (-580) 35 $ scale 0.2 0.2 $ color white $ text "Your Pokemon fainted!",
+      translate (-580) 10 $ scale 0.2 0.2 $ color white $ text "Choose a replacement.",
+      translate (-200) 40 $ pictures $ zipWith (drawBenchSlot benchIdx) [0 ..] bench
+    ]
+
 drawBenchSlot :: Int -> Int -> BattlePokemon -> Picture
 drawBenchSlot selectedIndex index bp =
-  let isSelected = index == selectedIndex
-      txtColor = if isSelected then white else makeColorI 180 180 180 255
+  let isSwitchable = bpHp bp > 0
+      isSelected = index == selectedIndex && isSwitchable
+      txtColor
+        | not isSwitchable = makeColorI 220 80 80 255
+        | isSelected = white
+        | otherwise = makeColorI 180 180 180 255
 
       -- Formato: "Pikachu   HP: 35/35"
       nameStr = pName (bpOriginal bp)
-      hpStr = "HP: " ++ show (bpHp bp) ++ "/" ++ show (bpMaxHp bp)
+      hpStr =
+        if isSwitchable
+          then "HP: " ++ show (bpHp bp) ++ "/" ++ show (bpMaxHp bp)
+          else "HP: 0/" ++ show (bpMaxHp bp) ++ " (FAINTED)"
 
       -- Posicionamiento en cuadrícula (2 columnas)
       xPos = if even index then 0 else 400
