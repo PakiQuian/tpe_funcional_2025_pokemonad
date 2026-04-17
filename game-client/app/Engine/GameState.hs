@@ -28,6 +28,7 @@ data Screen
   | TeamSelect
   | OpponentSelect
   | BattleScreen
+  | BattleResultScreen
   deriving (Show, Eq)
 
 data BattleMenuType = MainBattleMenu | FightMenu | BagMenu | PokemonMenu | SwitchConfirmMenu | QuitConfirmMenu
@@ -43,6 +44,8 @@ data GameState = GameState
     startBgImage :: Picture,
     menuBgImage :: Picture,
     logoImage :: Picture,
+    winnerBgImage :: Picture,
+    loserBgImage :: Picture,
     rngSeed :: StdGen,
     holdingUp :: Bool,
     holdingDown :: Bool,

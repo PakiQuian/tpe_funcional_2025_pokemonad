@@ -18,6 +18,7 @@ import Engine.World
     drainNetInbox,
     mergeNetAsync,
   )
+import Game.Battle (BattlePhase (..), BattleState (..), Winner (..))
 import Game.Pokemon (Pokemon (..), allPokemon)
 import Game.Trainer (Trainer (..), allTrainers)
 import Graphics.Gloss (Display (InWindow), Picture, black, loadBMP)
@@ -25,6 +26,7 @@ import Graphics.Gloss.Interface.IO.Game (playIO)
 import Graphics.Gloss.Interface.Pure.Game (Event)
 import Network.Socket (HostName, PortNumber, SockAddr, Socket)
 import P2P.Communication (connectTo, forkRecvLoop, listenAndAccept)
+import Screens.BattleEndScreen (drawBattleEndScreen)
 import Screens.BattleScreen (drawBattleScreen)
 import Screens.MenuScreen (drawMenuScreen)
 import Screens.MultiplayerScreen (drawMultiplayerScreen)
@@ -38,8 +40,8 @@ import System.Random (StdGen, initStdGen)
 --------------------------------------------------------------------------------
 -- MODELO DE DATOS (ESTADO)
 --------------------------------------------------------------------------------
-initialState :: Picture -> Picture -> Picture -> Map.Map Int Picture -> Map.Map Int Picture -> Map.Map Int Picture -> [Picture] -> StdGen -> GameState
-initialState startBg menuBg logo pokemonFrontSprites pokemonBackSprites trainerSprites battleBgs rng =
+initialState :: Picture -> Picture -> Picture -> Picture -> Picture -> Map.Map Int Picture -> Map.Map Int Picture -> Map.Map Int Picture -> [Picture] -> StdGen -> GameState
+initialState startBg menuBg logo winnerBg loserBg pokemonFrontSprites pokemonBackSprites trainerSprites battleBgs rng =
   GameState
     { currentScreen = StartScreen,
       selectedOption = 0,
@@ -50,6 +52,8 @@ initialState startBg menuBg logo pokemonFrontSprites pokemonBackSprites trainerS
       startBgImage = startBg,
       menuBgImage = menuBg,
       logoImage = logo,
+      winnerBgImage = winnerBg,
+      loserBgImage = loserBg,
       pokemonFrontSprites = pokemonFrontSprites,
       pokemonBackSprites = pokemonBackSprites,
       trainerSprites = trainerSprites,
@@ -88,6 +92,17 @@ draw state netSt = case currentScreen state of
   TeamSelect -> drawTeamSelectScreen (menuBgImage state) (logoImage state) (selectedPokemon state) (playerTeam state) (pokemonFrontSprites state)
   OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state) (pokemonFrontSprites state) (trainerSprites state)
   BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state) (battleMenuIndex state) (battleMenuType state) (battleMoveIndex state) (battleBenchIndex state)
+  BattleResultScreen ->
+    case battleState state of
+      Just bState ->
+        case phase bState of
+          BattleEnded winner ->
+            let resultBg = case winner of
+                  PlayerWon -> winnerBgImage state
+                  _ -> loserBgImage state
+             in drawBattleEndScreen resultBg winner (battleState state) (selectedTrainer state) (trainerSprites state) (pokemonFrontSprites state) (pokemonBackSprites state)
+          _ -> drawBattleEndScreen (winnerBgImage state) PlayerWon (battleState state) (selectedTrainer state) (trainerSprites state) (pokemonFrontSprites state) (pokemonBackSprites state)
+      Nothing -> drawBattleEndScreen (winnerBgImage state) PlayerWon (battleState state) (selectedTrainer state) (trainerSprites state) (pokemonFrontSprites state) (pokemonBackSprites state)
 
 drawWorld :: World -> IO Picture
 drawWorld w = pure $ draw (worldGame w) (netSubState w)
@@ -177,6 +192,8 @@ main = do
   bg3 <- loadBMP "game-client/assets/images/battle_bg_3.bmp"
   bg4 <- loadBMP "game-client/assets/images/battle_bg_4.bmp"
   bg5 <- loadBMP "game-client/assets/images/battle_bg_5.bmp"
+  winnerBg <- loadBMP "game-client/assets/images/winner.bmp"
+  loserBg <- loadBMP "game-client/assets/images/loser.bmp"
 
   let battleBgs = [bg1, bg2, bg3, bg4, bg5]
 
@@ -209,7 +226,7 @@ main = do
   netAsync <- newTVarIO Nothing
   let window = InWindow "Pokemonad P2P" (1280, 720) (100, 100)
       game0 =
-        initialState startBg menuBg logo pokemonFrontSpriteMap pokemonBackSpriteMap trainerSpriteMap battleBgs rng
+        initialState startBg menuBg logo winnerBg loserBg pokemonFrontSpriteMap pokemonBackSpriteMap trainerSpriteMap battleBgs rng
       world0 =
         World
           { worldGame = game0,

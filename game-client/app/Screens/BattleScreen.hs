@@ -2,7 +2,7 @@ module Screens.BattleScreen (drawBattleScreen) where
 
 import Data.Char (toUpper)
 import qualified Data.Map as Map
-import Engine.Common (drawTextWithShadow, pokemonBlue, pokemonYellow)
+import Engine.Common (drawTextWithShadow, pokemonYellow)
 import Engine.GameState (BattleMenuType (..))
 import Game.Battle (BattlePhase (..), BattlePokemon (..), BattleState (..), bpHp, bpMaxHp, bpOriginal)
 import Game.Move (Move (..))

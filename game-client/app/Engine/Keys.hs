@@ -135,6 +135,7 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
               0 -> state {currentScreen = Menu, battleMenuType = MainBattleMenu, battleState = Nothing, battleMoveIndex = 0, battleMenuIndex = 0, selectedTrainer = Nothing, selectedTrainerIndex = 0, playerTeam = []}
               1 -> state {battleMenuType = MainBattleMenu}
               _ -> state
+    BattleResultScreen -> returnToMainMenu state
     _ -> state
 -- Key Backspace / Delete / ESC
 handleInput (EventKey (SpecialKey KeyBackspace) Down _ _) state = handleBackKey state
@@ -378,9 +379,11 @@ submitSelectedMove state =
     Just bState ->
       let action = ActionMove (battleMoveIndex state)
           (nextBattle, nextRng) = submitPlayerAction (rngSeed state) bState action
+          resultScreen = battleResultScreenFrom nextBattle
        in state
             { battleState = Just nextBattle,
               rngSeed = nextRng,
+              currentScreen = resultScreen,
               battleMenuType = nextBattleMenuType nextBattle,
               battleMoveIndex = 0,
               battleBenchIndex = firstSwitchableBenchIndexFromBattle nextBattle
@@ -393,9 +396,11 @@ submitSelectedSwitch state =
     Just bState ->
       let action = ActionSwitch (battleBenchIndex state)
           (nextBattle, nextRng) = submitPlayerAction (rngSeed state) bState action
+          resultScreen = battleResultScreenFrom nextBattle
        in state
             { battleState = Just nextBattle,
               rngSeed = nextRng,
+              currentScreen = resultScreen,
               battleMenuType = nextBattleMenuType nextBattle,
               battleMoveIndex = 0,
               battleBenchIndex = firstSwitchableBenchIndexFromBattle nextBattle
@@ -411,6 +416,26 @@ nextBattleMenuType :: BattleState -> BattleMenuType
 nextBattleMenuType bState
   | phase bState == WaitingForForcedPlayerSwitch = PokemonMenu
   | otherwise = MainBattleMenu
+
+battleResultScreenFrom :: BattleState -> Screen
+battleResultScreenFrom bState =
+  case phase bState of
+    BattleEnded _ -> BattleResultScreen
+    _ -> BattleScreen
+
+returnToMainMenu :: GameState -> GameState
+returnToMainMenu state =
+  state
+    { currentScreen = Menu,
+      battleState = Nothing,
+      battleMenuType = MainBattleMenu,
+      battleMenuIndex = 0,
+      battleMoveIndex = 0,
+      battleBenchIndex = 0,
+      selectedTrainer = Nothing,
+      selectedTrainerIndex = 0,
+      playerTeam = []
+    }
 
 firstSwitchableBenchIndex :: GameState -> Int
 firstSwitchableBenchIndex state = maybe 0 firstSwitchableBenchIndexFromBattle (battleState state)
