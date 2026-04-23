@@ -1,6 +1,17 @@
-module Game.AI (chooseEnemyAction) where
+module Game.AI
+  ( chooseEnemyAction,
+    TrainingHyperParams (..),
+    RewardWeights (..),
+    defaultTrainingHyperParams,
+  )
+where
 
 import Game.Battle (BattleAction (..), BattleState)
+import Game.AIHyperParams
+  ( RewardWeights (..),
+    TrainingHyperParams (..),
+    defaultTrainingHyperParams,
+  )
 import Game.Trainer (AIDifficulty)
 import System.Random (StdGen)
 
