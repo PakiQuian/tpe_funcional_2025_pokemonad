@@ -1,6 +1,9 @@
 module Game.AITraining
   ( EpochMetrics (..),
+    TrainingRunSummary (..),
+    checkpointSelectionScore,
     runTrainingEpochs,
+    runTrainingEpochsDetailed,
   )
 where
 
@@ -34,27 +37,71 @@ data EpochMetrics = EpochMetrics
   }
   deriving (Show, Eq)
 
+data TrainingRunSummary = TrainingRunSummary
+  { trsFinalWeights :: QWeights,
+    trsCanonicalWeights :: QWeights,
+    trsCanonicalEpoch :: Int,
+    trsCanonicalScore :: Float,
+    trsMetrics :: [EpochMetrics]
+  }
+  deriving (Show, Eq)
+
 runTrainingEpochs :: StdGen -> TrainingHyperParams -> Int -> (QWeights, [EpochMetrics], StdGen)
 runTrainingEpochs rng params epochs =
+  let (summary, nextRng) = runTrainingEpochsDetailed rng params epochs
+   in (trsCanonicalWeights summary, trsMetrics summary, nextRng)
+
+runTrainingEpochsDetailed :: StdGen -> TrainingHyperParams -> Int -> (TrainingRunSummary, StdGen)
+runTrainingEpochsDetailed rng params epochs =
   let usableTrainers = trainingTrainers
       initialWeights = defaultQWeights
-   in trainEpochLoop rng params usableTrainers initialWeights [] 0 epochs
+      initialBest = (initialWeights, -1, -1.0e30 :: Float)
+      (finalWeights, bestWeights, bestEpoch, bestScore, metrics, nextRng) =
+        trainEpochLoop rng params usableTrainers initialWeights initialBest [] 0 epochs
+      summary =
+        TrainingRunSummary
+          { trsFinalWeights = finalWeights,
+            trsCanonicalWeights = bestWeights,
+            trsCanonicalEpoch = bestEpoch,
+            trsCanonicalScore = bestScore,
+            trsMetrics = metrics
+          }
+   in (summary, nextRng)
 
 trainEpochLoop ::
   StdGen ->
   TrainingHyperParams ->
   [Trainer] ->
   QWeights ->
+  (QWeights, Int, Float) ->
   [EpochMetrics] ->
   Int ->
   Int ->
-  (QWeights, [EpochMetrics], StdGen)
-trainEpochLoop rng _params _trainers weights metrics epochIdx totalEpochs
-  | epochIdx >= totalEpochs = (weights, reverse metrics, rng)
-trainEpochLoop rng params trainers weights metrics epochIdx totalEpochs =
+  (QWeights, QWeights, Int, Float, [EpochMetrics], StdGen)
+trainEpochLoop rng _params _trainers weights bestState metrics epochIdx totalEpochs
+  | epochIdx >= totalEpochs =
+      let (bestWeights, bestEpoch, bestScore) = bestState
+          fallbackEpoch = if bestEpoch < 0 then max 0 (totalEpochs - 1) else bestEpoch
+          fallbackScore = if bestEpoch < 0 then 0.0 else bestScore
+       in (weights, bestWeights, fallbackEpoch, fallbackScore, reverse metrics, rng)
+trainEpochLoop rng params trainers weights bestState metrics epochIdx totalEpochs =
     let epsilon = epsilonAtEpoch params epochIdx
         (weightsAfterEpoch, epochMetrics, rngAfterEpoch) = runSingleEpoch rng params trainers weights epochIdx epsilon
-     in trainEpochLoop rngAfterEpoch params trainers weightsAfterEpoch (epochMetrics : metrics) (epochIdx + 1) totalEpochs
+        currentScore = checkpointSelectionScore epochMetrics
+        (prevBestWeights, prevBestEpoch, prevBestScore) = bestState
+        nextBestState =
+          if currentScore > prevBestScore
+            then (weightsAfterEpoch, epochIdx, currentScore)
+            else (prevBestWeights, prevBestEpoch, prevBestScore)
+     in trainEpochLoop
+          rngAfterEpoch
+          params
+          trainers
+          weightsAfterEpoch
+          nextBestState
+          (epochMetrics : metrics)
+          (epochIdx + 1)
+          totalEpochs
 
 runSingleEpoch ::
   StdGen ->
@@ -235,6 +282,13 @@ epsilonAtEpoch params epochIdx =
       decay = hpEpsilonDecay params
       decayed = startEps * (decay ^^ epochIdx)
    in max minEps decayed
+
+checkpointSelectionScore :: EpochMetrics -> Float
+checkpointSelectionScore metrics =
+  let rewardTerm = emAverageReward metrics
+      winTerm = emWinRate metrics * 10.0
+      paceTerm = negate (emAverageTurns metrics * 0.05)
+   in rewardTerm + winTerm + paceTerm
 
 safeRatio :: Int -> Int -> Float
 safeRatio num den

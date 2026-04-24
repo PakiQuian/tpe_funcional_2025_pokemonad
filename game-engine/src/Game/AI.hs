@@ -1,10 +1,16 @@
 module Game.AI
   ( chooseEnemyAction,
+    defaultCheckpointPath,
+    saveCanonicalCheckpoint,
+    loadCheckpointWeights,
     TrainingHyperParams (..),
     RewardWeights (..),
     defaultTrainingHyperParams,
     EpochMetrics (..),
+    TrainingRunSummary (..),
+    checkpointSelectionScore,
     runTrainingEpochs,
+    runTrainingEpochsDetailed,
     FeatureVector,
     QWeights (..),
     defaultQWeights,
@@ -28,9 +34,17 @@ import Game.AIModel
     extractFeatures,
     qValue,
   )
+import Game.AICheckpoint
+  ( defaultCheckpointPath,
+    loadCheckpointWeights,
+    saveCanonicalCheckpoint,
+  )
 import Game.AITraining
   ( EpochMetrics (..),
+    TrainingRunSummary (..),
+    checkpointSelectionScore,
     runTrainingEpochs,
+    runTrainingEpochsDetailed,
   )
 import Game.Battle (BattleAction (..), BattleState)
 import Game.AIHyperParams

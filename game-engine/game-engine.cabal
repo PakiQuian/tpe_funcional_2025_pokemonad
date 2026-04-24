@@ -10,6 +10,7 @@ library
     hs-source-dirs:   src
     
     exposed-modules:  Game.AI
+                      Game.AICheckpoint
                       Game.AIHyperParams
                       Game.AIModel
                       Game.AITraining
