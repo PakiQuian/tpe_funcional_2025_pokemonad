@@ -3,6 +3,8 @@ module Game.AI
     TrainingHyperParams (..),
     RewardWeights (..),
     defaultTrainingHyperParams,
+    EpochMetrics (..),
+    runTrainingEpochs,
     FeatureVector,
     QWeights (..),
     defaultQWeights,
@@ -25,6 +27,10 @@ import Game.AIModel
     difficultyExplorationRate,
     extractFeatures,
     qValue,
+  )
+import Game.AITraining
+  ( EpochMetrics (..),
+    runTrainingEpochs,
   )
 import Game.Battle (BattleAction (..), BattleState)
 import Game.AIHyperParams
