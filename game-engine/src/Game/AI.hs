@@ -3,9 +3,29 @@ module Game.AI
     TrainingHyperParams (..),
     RewardWeights (..),
     defaultTrainingHyperParams,
+    FeatureVector,
+    QWeights (..),
+    defaultQWeights,
+    candidateActions,
+    extractFeatures,
+    qValue,
+    chooseActionGreedy,
+    chooseActionEpsilon,
+    difficultyExplorationRate,
   )
 where
 
+import Game.AIModel
+  ( FeatureVector,
+    QWeights (..),
+    candidateActions,
+    chooseActionEpsilon,
+    chooseActionGreedy,
+    defaultQWeights,
+    difficultyExplorationRate,
+    extractFeatures,
+    qValue,
+  )
 import Game.Battle (BattleAction (..), BattleState)
 import Game.AIHyperParams
   ( RewardWeights (..),
@@ -16,7 +36,7 @@ import Game.Trainer (AIDifficulty)
 import System.Random (StdGen)
 
 chooseEnemyAction :: StdGen -> AIDifficulty -> BattleState -> (BattleAction, StdGen)
-chooseEnemyAction rng _difficulty _battleState =
-  -- TODO: Ajustar precision y calidad de decisión en funcion de la dificultad recibida.
-  -- TODO: Implementar estrategia IA real en base al estado de batalla (sin conocer la accion del jugador).
-  (ActionMove 0, rng)
+chooseEnemyAction rng difficulty battleState =
+  let epsilon = difficultyExplorationRate difficulty
+      (chosenMaybe, nextRng) = chooseActionEpsilon rng epsilon defaultQWeights battleState
+   in (maybe (ActionMove 0) id chosenMaybe, nextRng)
