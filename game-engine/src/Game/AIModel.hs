@@ -44,8 +44,8 @@ defaultQWeights =
           0.80, -- estimated KO chance
           0.45, -- defensive switch gain
           0.35, -- offensive switch gain
-          0.12, -- move action prior
-          -0.05 -- switch action prior
+          0.22, -- move action prior
+          -0.35 -- switch action prior
         ]
     }
 
@@ -56,7 +56,8 @@ candidateActions bState =
       availableSwitches =
         [ ActionSwitch benchIdx
           | (benchIdx, bp) <- zip [0 ..] (enemyBench bState),
-            bpStatus bp /= Fainted
+            bpStatus bp /= Fainted,
+            shouldConsiderSwitch bState benchIdx bp
         ]
    in case phase bState of
         BattleEnded _ -> []
@@ -216,3 +217,14 @@ bestTypeEffectivenessAgainst defender attacker =
   case bpMoves attacker of
     [] -> 1.0
     moves -> maximum [moveTypeEffectiveness mv defender | mv <- moves]
+
+shouldConsiderSwitch :: BattleState -> Int -> BattlePokemon -> Bool
+shouldConsiderSwitch bState _benchIdx incoming =
+  let current = enemyActive bState
+      opponent = playerActive bState
+      hpRatio = safeRatio (bpHp current) (bpMaxHp current)
+      defGain = estimateSwitchDefensiveGain current incoming opponent
+      offGain = estimateSwitchOffensiveGain current incoming opponent
+      meaningfulGain = defGain > 0.20 || offGain > 0.25
+      emergency = hpRatio < 0.35
+   in meaningfulGain || emergency

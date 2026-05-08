@@ -3,7 +3,9 @@ module Game.AITraining
     TrainingRunSummary (..),
     checkpointSelectionScore,
     runTrainingEpochs,
+    runTrainingEpochsFrom,
     runTrainingEpochsDetailed,
+    runTrainingEpochsDetailedFrom,
   )
 where
 
@@ -51,10 +53,18 @@ runTrainingEpochs rng params epochs =
   let (summary, nextRng) = runTrainingEpochsDetailed rng params epochs
    in (trsCanonicalWeights summary, trsMetrics summary, nextRng)
 
+runTrainingEpochsFrom :: StdGen -> TrainingHyperParams -> Int -> QWeights -> (QWeights, [EpochMetrics], StdGen)
+runTrainingEpochsFrom rng params epochs initialWeights =
+  let (summary, nextRng) = runTrainingEpochsDetailedFrom rng params epochs initialWeights
+   in (trsCanonicalWeights summary, trsMetrics summary, nextRng)
+
 runTrainingEpochsDetailed :: StdGen -> TrainingHyperParams -> Int -> (TrainingRunSummary, StdGen)
 runTrainingEpochsDetailed rng params epochs =
+  runTrainingEpochsDetailedFrom rng params epochs defaultQWeights
+
+runTrainingEpochsDetailedFrom :: StdGen -> TrainingHyperParams -> Int -> QWeights -> (TrainingRunSummary, StdGen)
+runTrainingEpochsDetailedFrom rng params epochs initialWeights =
   let usableTrainers = trainingTrainers
-      initialWeights = defaultQWeights
       initialBest = (initialWeights, -1, -1.0e30 :: Float)
       (finalWeights, bestWeights, bestEpoch, bestScore, metrics, nextRng) =
         trainEpochLoop rng params usableTrainers initialWeights initialBest [] 0 epochs
@@ -194,9 +204,13 @@ runSelfPlayEpisode rng params initialWeights epsilon battleState0 =
 
 tdUpdate :: TrainingHyperParams -> QWeights -> BattleState -> BattleAction -> Float -> BattleState -> QWeights
 tdUpdate params weights s action reward sNext =
-  let prediction = qValue weights s action
+  let switchPenalty = case action of
+        ActionSwitch _ -> hpSwitchPenalty params
+        ActionMove _ -> 0.0
+      adjustedReward = reward - switchPenalty
+      prediction = qValue weights s action
       nextBest = bestQValue weights sNext
-      target = reward + hpDiscountGamma params * nextBest
+      target = adjustedReward + hpDiscountGamma params * nextBest
       delta = clampSigned (hpGradientClip params) (target - prediction)
       alpha = hpLearningRateAlpha params
       feats = extractFeatures s action

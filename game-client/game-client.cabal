@@ -15,6 +15,7 @@ executable pokemonad
                       Engine.World,
                       Screens.StartScreen,
                       Screens.MenuScreen,
+                      Screens.AISimulatorScreen,
                       Screens.PokedexScreen,
                       Screens.PokemonScreen,
                       Screens.MultiplayerScreen,

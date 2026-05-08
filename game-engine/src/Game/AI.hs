@@ -2,8 +2,11 @@ module Game.AI
   ( chooseEnemyAction,
     chooseEnemyActionWithWeights,
     chooseEnemyActionWithMaybeWeights,
+    AICheckpointData (..),
     defaultCheckpointPath,
     saveCanonicalCheckpoint,
+    saveCheckpointData,
+    loadCheckpointData,
     loadCheckpointWeights,
     TrainingHyperParams (..),
     RewardWeights (..),
@@ -12,7 +15,9 @@ module Game.AI
     TrainingRunSummary (..),
     checkpointSelectionScore,
     runTrainingEpochs,
+    runTrainingEpochsFrom,
     runTrainingEpochsDetailed,
+    runTrainingEpochsDetailedFrom,
     FeatureVector,
     QWeights (..),
     defaultQWeights,
@@ -37,8 +42,11 @@ import Game.AIModel
     qValue,
   )
 import Game.AICheckpoint
-  ( defaultCheckpointPath,
+  ( AICheckpointData (..),
+    defaultCheckpointPath,
+    loadCheckpointData,
     loadCheckpointWeights,
+    saveCheckpointData,
     saveCanonicalCheckpoint,
   )
 import Game.AITraining
@@ -46,7 +54,9 @@ import Game.AITraining
     TrainingRunSummary (..),
     checkpointSelectionScore,
     runTrainingEpochs,
+    runTrainingEpochsFrom,
     runTrainingEpochsDetailed,
+    runTrainingEpochsDetailedFrom,
   )
 import Game.Battle (BattleAction (..), BattleState)
 import Game.AIHyperParams

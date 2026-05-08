@@ -26,6 +26,7 @@ data TrainingHyperParams = TrainingHyperParams
     hpEpsilonMin :: Float,
     hpEpsilonDecay :: Float,
     hpGradientClip :: Float,
+    hpSwitchPenalty :: Float,
     hpRewardWeights :: RewardWeights
   }
   deriving (Show, Eq)
@@ -39,6 +40,7 @@ defaultTrainingHyperParams =
       hpEpsilonMin = 0.05,
       hpEpsilonDecay = 0.995,
       hpGradientClip = 1.0,
+      hpSwitchPenalty = 0.05,
       hpRewardWeights =
         RewardWeights
           { rewardDamageInflicted = 1.0,

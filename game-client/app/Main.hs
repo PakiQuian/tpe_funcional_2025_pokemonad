@@ -3,12 +3,12 @@ module Main where
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TQueue (newTQueueIO)
-import Control.Concurrent.STM.TVar (newTVarIO, writeTVar)
+import Control.Concurrent.STM.TVar (newTVarIO, readTVar, writeTVar)
 import Control.Exception (SomeException, try)
 import Control.Monad (void)
 import qualified Data.Map as Map
 import Engine.Common (loadPngSafe)
-import Engine.GameState (BattleMenuType (..), GameState (..), MultiplayerIntent (..), Screen (..))
+import Engine.GameState (AITrainingResult (..), BattleMenuType (..), GameState (..), MultiplayerIntent (..), Screen (..))
 import Engine.Keys (handleInput, handleTick)
 import Engine.World
   ( NetConnAsync (..),
@@ -18,14 +18,26 @@ import Engine.World
     drainNetInbox,
     mergeNetAsync,
   )
+import Game.AI
+  ( AICheckpointData (..),
+    EpochMetrics (..),
+    TrainingRunSummary (..),
+    defaultCheckpointPath,
+    defaultQWeights,
+    defaultTrainingHyperParams,
+    loadCheckpointData,
+    runTrainingEpochsDetailed,
+    saveCheckpointData,
+  )
 import Game.Battle (BattlePhase (..), BattleState (..), Winner (..))
 import Game.Pokemon (Pokemon (..), allPokemon)
 import Game.Trainer (Trainer (..), allTrainers)
 import Graphics.Gloss (Display (InWindow), Picture, black, loadBMP)
 import Graphics.Gloss.Interface.IO.Game (playIO)
-import Graphics.Gloss.Interface.Pure.Game (Event)
+import Graphics.Gloss.Interface.Pure.Game (Event (..), Key (..), KeyState (..), SpecialKey (..))
 import Network.Socket (HostName, PortNumber, SockAddr, Socket)
 import P2P.Communication (connectTo, forkRecvLoop, listenAndAccept)
+import Screens.AISimulatorScreen (drawAISimulatorScreen)
 import Screens.BattleEndScreen (drawBattleEndScreen)
 import Screens.BattleScreen (drawBattleScreen)
 import Screens.MenuScreen (drawMenuScreen)
@@ -72,7 +84,12 @@ initialState startBg menuBg logo winnerBg loserBg pokemonFrontSprites pokemonBac
       multiplayerPort = "7878",
       multiplayerRow = 0,
       multiplayerPending = Nothing,
-      multiplayerError = Nothing
+      multiplayerError = Nothing,
+      enemyAIWeights = Nothing,
+      simulatorTraining = False,
+      simulatorStatus = "Ready. Press ENTER to run 100 epochs.",
+      simulatorTotalEpochs = 0,
+      simulatorLogs = []
     }
 
 --------------------------------------------------------------------------------
@@ -89,6 +106,7 @@ draw state netSt = case currentScreen state of
     let maybeSprite = Map.lookup (selectedPokemon state) (pokemonFrontSprites state)
      in drawPokemonScreen (menuBgImage state) (logoImage state) (selectedPokemon state) maybeSprite
   Multiplayer -> drawMultiplayerScreen (menuBgImage state) (logoImage state) state netSt
+  AISimulator -> drawAISimulatorScreen (menuBgImage state) (logoImage state) state
   TeamSelect -> drawTeamSelectScreen (menuBgImage state) (logoImage state) (selectedPokemon state) (playerTeam state) (pokemonFrontSprites state)
   OpponentSelect -> drawOpponentSelectScreen (menuBgImage state) (logoImage state) (selectedTrainerIndex state) (pokemonFrontSprites state) (trainerSprites state)
   BattleScreen -> drawBattleScreen (battleBackgrounds state) (currentBattleBg state) (battleState state) (pokemonFrontSprites state) (pokemonBackSprites state) (battleMenuIndex state) (battleMenuType state) (battleMoveIndex state) (battleBenchIndex state)
@@ -110,21 +128,119 @@ drawWorld w = pure $ draw (worldGame w) (netSubState w)
 handleWorldInput :: Event -> World -> IO World
 handleWorldInput ev w = do
   let g0 = worldGame w
-      g1 = handleInput ev g0
+  w1 <- launchAITrainingIfRequested ev w
+  let g1 = handleInput ev (worldGame w1)
       leftMP = currentScreen g0 == Multiplayer && currentScreen g1 /= Multiplayer
-  w1 <- if leftMP then disconnectNetWorld w else pure w
-  let w2 = w1 {worldGame = g1}
+  w2 <- if leftMP then disconnectNetWorld w1 else pure w1
+  let w3 = w2 {worldGame = g1}
   case multiplayerPending g1 of
-    Nothing -> pure w2
+    Nothing -> pure w3
     Just intent ->
       let g2 = g1 {multiplayerPending = Nothing}
-       in startMultiplayerNet intent (w2 {worldGame = g2})
+       in startMultiplayerNet intent (w3 {worldGame = g2})
+
+launchAITrainingIfRequested :: Event -> World -> IO World
+launchAITrainingIfRequested ev w
+  | currentScreen gs /= AISimulator = pure w
+  | not isEnterDown = pure w
+  | simulatorTraining gs = pure w
+  | otherwise = do
+      let rng = rngSeed gs
+      void $ forkIO $ do
+        maybeCheckpoint <- loadCheckpointData defaultCheckpointPath
+        let priorEpochs = maybe 0 acdTotalEpochs maybeCheckpoint
+            priorBestScore = maybe (-1.0e30) acdBestScore maybeCheckpoint
+            priorWeights = maybe defaultQWeights acdWeights maybeCheckpoint
+            epochsToRun = 100
+            (summary, nextRng) =
+              runTrainingEpochsDetailed rng defaultTrainingHyperParams epochsToRun
+            newTotal = priorEpochs + epochsToRun
+            newScore = trsCanonicalScore summary
+            (finalWeights, finalScore) =
+              if newScore > priorBestScore
+                then (trsCanonicalWeights summary, newScore)
+                else (priorWeights, priorBestScore)
+            newLogs = reverse (map (formatEpochLine priorEpochs) (trsMetrics summary))
+            statusMsg =
+              if newScore > priorBestScore
+                then "New best! Score: " ++ shortFloat newScore ++ " | Total epochs: " ++ show newTotal
+                else "No improvement. Best score: " ++ shortFloat finalScore ++ " | Total epochs: " ++ show newTotal
+            nextCheckpoint =
+              AICheckpointData
+                { acdWeights = finalWeights,
+                  acdTotalEpochs = newTotal,
+                  acdBestScore = finalScore
+                }
+        saveCheckpointData defaultCheckpointPath nextCheckpoint
+        atomically $
+          writeTVar (aiTrainingAsync w) $
+            Just
+              AITrainingResult
+                { atrWeights = finalWeights,
+                  atrTotalEpochs = newTotal,
+                  atrLogs = newLogs,
+                  atrStatus = statusMsg,
+                  atrRng = nextRng
+                }
+      pure
+        w
+          { worldGame =
+              gs
+                { simulatorTraining = True,
+                  simulatorStatus = "Training in progress..."
+                }
+          }
+  where
+    gs = worldGame w
+    isEnterDown = case ev of
+      EventKey (SpecialKey KeyEnter) Down _ _ -> True
+      _ -> False
+
+mergeAITraining :: World -> IO World
+mergeAITraining w = do
+  m <- atomically $ do
+    x <- readTVar (aiTrainingAsync w)
+    writeTVar (aiTrainingAsync w) Nothing
+    pure x
+  case m of
+    Nothing -> pure w
+    Just result -> pure w {worldGame = applyAIResult result (worldGame w)}
+
+applyAIResult :: AITrainingResult -> GameState -> GameState
+applyAIResult result gs =
+  gs
+    { rngSeed = atrRng result,
+      enemyAIWeights = Just (atrWeights result),
+      simulatorTotalEpochs = atrTotalEpochs result,
+      simulatorStatus = atrStatus result,
+      simulatorLogs = atrLogs result ++ simulatorLogs gs,
+      simulatorTraining = False
+    }
+
+formatEpochLine :: Int -> EpochMetrics -> String
+formatEpochLine epochOffset m =
+  "E"
+    ++ show (epochOffset + emEpochIndex m)
+    ++ " eps="
+    ++ shortFloat (emEpsilon m)
+    ++ " reward="
+    ++ shortFloat (emAverageReward m)
+    ++ " win="
+    ++ shortFloat (emWinRate m)
+    ++ " turns="
+    ++ shortFloat (emAverageTurns m)
+
+shortFloat :: Float -> String
+shortFloat x =
+  let scaled = fromIntegral (round (x * 100.0) :: Int) / 100.0 :: Float
+   in show scaled
 
 handleWorldTick :: Float -> World -> IO World
 handleWorldTick dt w = do
   wMerged <- mergeNetAsync w
   wDrained <- drainNetInbox wMerged
-  pure wDrained {worldGame = handleTick dt (worldGame wDrained)}
+  wAI <- mergeAITraining wDrained
+  pure wAI {worldGame = handleTick dt (worldGame wAI)}
 
 runListen :: PortNumber -> World -> IO ()
 runListen port w = do
@@ -224,6 +340,7 @@ main = do
 
   netInQueue <- newTQueueIO
   netAsync <- newTVarIO Nothing
+  aiAsync <- newTVarIO Nothing
   let window = InWindow "Pokemonad P2P" (1280, 720) (100, 100)
       game0 =
         initialState startBg menuBg logo winnerBg loserBg pokemonFrontSpriteMap pokemonBackSpriteMap trainerSpriteMap battleBgs rng
@@ -233,7 +350,8 @@ main = do
             netInQueue = netInQueue,
             netSubState = NetDisconnected,
             netSocket = Nothing,
-            netConnAsync = netAsync
+            netConnAsync = netAsync,
+            aiTrainingAsync = aiAsync
           }
 
   playIO

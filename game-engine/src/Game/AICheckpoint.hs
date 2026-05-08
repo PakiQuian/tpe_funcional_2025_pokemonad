@@ -1,46 +1,81 @@
 module Game.AICheckpoint
-  ( defaultCheckpointPath,
+  ( AICheckpointData (..),
+    defaultCheckpointPath,
     saveCanonicalCheckpoint,
+    saveCheckpointData,
+    loadCheckpointData,
     loadCheckpointWeights,
   )
 where
 
 import Data.List (intercalate)
+import Control.Exception (evaluate)
 import Game.AIModel (QWeights (..))
 import Game.AITraining (TrainingRunSummary (..))
+import System.IO (IOMode (ReadMode), hGetContents, withFile)
 import System.IO.Error (catchIOError)
 import Text.Read (readMaybe)
+
+data AICheckpointData = AICheckpointData
+  { acdWeights :: QWeights,
+    acdTotalEpochs :: Int,
+    acdBestScore :: Float
+  }
+  deriving (Show, Eq)
 
 defaultCheckpointPath :: FilePath
 defaultCheckpointPath = "game-engine/data/ai_checkpoint.txt"
 
 saveCanonicalCheckpoint :: FilePath -> TrainingRunSummary -> IO ()
 saveCanonicalCheckpoint path summary =
-  writeFile path (encodeCheckpoint summary)
+  saveCheckpointData path (AICheckpointData (trsCanonicalWeights summary) 0 (trsCanonicalScore summary))
+
+saveCheckpointData :: FilePath -> AICheckpointData -> IO ()
+saveCheckpointData path checkpoint =
+  writeFile path (encodeCheckpoint checkpoint)
 
 loadCheckpointWeights :: FilePath -> IO (Maybe QWeights)
 loadCheckpointWeights path = do
-  contentOrEmpty <- catchIOError (readFile path) (\_ -> pure "")
-  pure (decodeWeights contentOrEmpty)
+  maybeData <- loadCheckpointData path
+  pure (acdWeights <$> maybeData)
 
-encodeCheckpoint :: TrainingRunSummary -> String
-encodeCheckpoint summary =
-  let weights = trsCanonicalWeights summary
+loadCheckpointData :: FilePath -> IO (Maybe AICheckpointData)
+loadCheckpointData path = do
+  contentOrEmpty <- catchIOError (readFileStrict path) (\_ -> pure "")
+  pure (decodeCheckpoint contentOrEmpty)
+
+readFileStrict :: FilePath -> IO String
+readFileStrict path =
+  withFile path ReadMode $ \h -> do
+    contents <- hGetContents h
+    _ <- evaluate (length contents)
+    pure contents
+
+encodeCheckpoint :: AICheckpointData -> String
+encodeCheckpoint checkpoint =
+  let weights = acdWeights checkpoint
       coeffsLine = "coeffs=" ++ intercalate "," (map show (qCoeffs weights))
    in unlines
-        [ "selected_epoch=" ++ show (trsCanonicalEpoch summary),
-          "selection_score=" ++ show (trsCanonicalScore summary),
+        [ "total_epochs=" ++ show (acdTotalEpochs checkpoint),
+          "best_score=" ++ show (acdBestScore checkpoint),
           "bias=" ++ show (qBias weights),
           coeffsLine
         ]
 
-decodeWeights :: String -> Maybe QWeights
-decodeWeights raw = do
+decodeCheckpoint :: String -> Maybe AICheckpointData
+decodeCheckpoint raw = do
   biasStr <- lookupKey "bias" pairs
   coeffsStr <- lookupKey "coeffs" pairs
+  totalEpochs <- maybe (Just 0) readMaybe (lookupKey "total_epochs" pairs)
+  bestScore <- maybe (Just (-1.0e30)) readMaybe (lookupKey "best_score" pairs)
   parsedBias <- readMaybe biasStr
   parsedCoeffs <- mapM readMaybe (splitByComma coeffsStr)
-  pure QWeights {qBias = parsedBias, qCoeffs = parsedCoeffs}
+  pure
+    AICheckpointData
+      { acdWeights = QWeights {qBias = parsedBias, qCoeffs = parsedCoeffs},
+        acdTotalEpochs = totalEpochs,
+        acdBestScore = bestScore
+      }
   where
     pairs = map parseLine (lines raw)
 

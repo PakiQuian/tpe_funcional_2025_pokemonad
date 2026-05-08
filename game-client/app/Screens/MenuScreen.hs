@@ -20,6 +20,7 @@ menuOptions :: [String]
 menuOptions =
   [ "POKEDEX",
     "P2P CONNECT",
+    "AI SIMULATOR",
     "SINGLE PLAYER"
   ]
 
@@ -39,8 +40,8 @@ drawMenuBox selection =
   translate 0 (-100) $
     pictures
       [ -- Caja de fondo del menú
-        color white $ rectangleSolid 520 270, -- Borde Blanco
-        color pokemonBlue $ rectangleSolid 500 250, -- Fondo Azul
+        color white $ rectangleSolid 520 330, -- Borde Blanco
+        color pokemonBlue $ rectangleSolid 500 310, -- Fondo Azul
         translate (-200) 50 $ pictures (zipWith (drawOption selection) [0 ..] menuOptions)
       ]
 

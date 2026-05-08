@@ -3,15 +3,25 @@ module Engine.GameState
     GameState (..),
     BattleMenuType (..),
     MultiplayerIntent (..),
+    AITrainingResult (..),
   )
 where
 
 import qualified Data.Map as Map
+import Game.AI (QWeights)
 import Game.Battle (BattleState)
 import Game.Trainer (Trainer)
 import Graphics.Gloss (Picture)
 import Network.Socket (HostName, PortNumber)
 import System.Random (StdGen)
+
+data AITrainingResult = AITrainingResult
+  { atrWeights :: QWeights,
+    atrTotalEpochs :: Int,
+    atrLogs :: [String],
+    atrStatus :: String,
+    atrRng :: StdGen
+  }
 
 -- | Acción de red solicitada desde la pantalla multijugador; Main la ejecuta en IO.
 data MultiplayerIntent
@@ -25,6 +35,7 @@ data Screen
   | Pokedex
   | PokemonDetail
   | Multiplayer
+  | AISimulator
   | TeamSelect
   | OpponentSelect
   | BattleScreen
@@ -69,5 +80,10 @@ data GameState = GameState
     -- 0 = editar host, 1 = editar puerto, 2 = escuchar, 3 = conectar
     multiplayerRow :: Int,
     multiplayerPending :: Maybe MultiplayerIntent,
-    multiplayerError :: Maybe String
+    multiplayerError :: Maybe String,
+    enemyAIWeights :: Maybe QWeights,
+    simulatorTraining :: Bool,
+    simulatorStatus :: String,
+    simulatorTotalEpochs :: Int,
+    simulatorLogs :: [String]
   }

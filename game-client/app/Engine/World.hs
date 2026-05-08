@@ -13,7 +13,7 @@ import Control.Concurrent.STM (STM, atomically, readTVar, writeTVar)
 import Control.Concurrent.STM.TQueue (TQueue, tryReadTQueue)
 import Control.Concurrent.STM.TVar (TVar)
 import Data.List (foldl')
-import Engine.GameState (GameState (..), Screen (..))
+import Engine.GameState (AITrainingResult, GameState (..), Screen (..))
 import Network.Socket (Socket, close)
 import P2P.Serialization (AppMsg (..))
 
@@ -38,7 +38,8 @@ data World = World
     netInQueue :: TQueue AppMsg,
     netSubState :: NetSubState,
     netSocket :: Maybe Socket,
-    netConnAsync :: TVar (Maybe NetConnAsync)
+    netConnAsync :: TVar (Maybe NetConnAsync),
+    aiTrainingAsync :: TVar (Maybe AITrainingResult)
   }
 
 -- Vacía la cola en una sola transacción STM y aplica los mensajes al juego.

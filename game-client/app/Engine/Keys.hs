@@ -10,7 +10,13 @@ import Data.Char (isAlphaNum, isDigit)
 import qualified Data.Map as Map
 import Engine.GameState (BattleMenuType (..), GameState (..), MultiplayerIntent (..), Screen (..))
 import Game.Battle (BattlePokemon (bpStatus), bpHp)
-import Game.Engine (BattleAction (..), BattlePhase (..), BattleState (..), initBattleEngine, submitPlayerAction)
+import Game.Engine
+  ( BattleAction (..),
+    BattlePhase (..),
+    BattleState (..),
+    initBattleEngine,
+    submitPlayerActionWithEnemyWeights,
+  )
 import Game.Pokemon (allPokemon)
 import Game.Trainer (Trainer, allTrainers)
 import Game.Types (Status (..))
@@ -83,6 +89,7 @@ handleInput (EventKey (SpecialKey KeyEnter) Down _ _) state =
   case currentScreen state of
     StartScreen -> state {currentScreen = Menu}
     Menu -> state {currentScreen = chooseScreen (selectedOption state)}
+    AISimulator -> state
     Multiplayer -> handleMultiplayerEnter state
     Pokedex -> state {currentScreen = PokemonDetail}
     OpponentSelect -> handleOpponentSelectEnter state
@@ -206,7 +213,7 @@ moveUp state = case currentScreen state of
 moveDown :: GameState -> GameState
 moveDown state = case currentScreen state of
   StartScreen -> state {currentScreen = Menu}
-  Menu -> state {selectedOption = min 2 (selectedOption state + 1)}
+  Menu -> state {selectedOption = min 3 (selectedOption state + 1)}
   Multiplayer -> state {multiplayerRow = min 3 (multiplayerRow state + 1)}
   Pokedex -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
   TeamSelect -> state {selectedPokemon = min (length allPokemon) (selectedPokemon state + 1)}
@@ -300,6 +307,11 @@ goBack state = case currentScreen state of
         multiplayerError = Nothing,
         multiplayerPending = Nothing
       }
+  AISimulator ->
+    state
+      { currentScreen = Menu,
+        selectedOption = 0
+      }
   TeamSelect -> state {currentScreen = Menu, selectedOption = 0, playerTeam = []}
   OpponentSelect -> state {currentScreen = TeamSelect}
   BattleScreen -> state
@@ -307,7 +319,8 @@ goBack state = case currentScreen state of
 chooseScreen :: Int -> Screen
 chooseScreen 0 = Pokedex
 chooseScreen 1 = Multiplayer
-chooseScreen 2 = TeamSelect
+chooseScreen 2 = AISimulator
+chooseScreen 3 = TeamSelect
 chooseScreen _ = Menu
 
 handleTeamSelectEnter :: GameState -> GameState
@@ -378,7 +391,7 @@ submitSelectedMove state =
     Nothing -> state
     Just bState ->
       let action = ActionMove (battleMoveIndex state)
-          (nextBattle, nextRng) = submitPlayerAction (rngSeed state) bState action
+          (nextBattle, nextRng) = submitPlayerActionWithEnemyWeights (enemyAIWeights state) (rngSeed state) bState action
           resultScreen = battleResultScreenFrom nextBattle
        in state
             { battleState = Just nextBattle,
@@ -395,7 +408,7 @@ submitSelectedSwitch state =
     Nothing -> state
     Just bState ->
       let action = ActionSwitch (battleBenchIndex state)
-          (nextBattle, nextRng) = submitPlayerAction (rngSeed state) bState action
+          (nextBattle, nextRng) = submitPlayerActionWithEnemyWeights (enemyAIWeights state) (rngSeed state) bState action
           resultScreen = battleResultScreenFrom nextBattle
        in state
             { battleState = Just nextBattle,
