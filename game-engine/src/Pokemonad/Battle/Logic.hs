@@ -9,15 +9,15 @@ where
 
 import Data.List (findIndex)
 import Pokemonad.Battle.State
-  ( BattlePokemon (..),
-    BattlePhase (..),
+  ( BattlePhase (..),
+    BattlePokemon (..),
     BattleState (..),
     Side (..),
     Winner (..),
-    getBench,
     getActive,
-    setBench,
+    getBench,
     setActive,
+    setBench,
   )
 import Pokemonad.Core.Pokemon (Pokemon (..))
 import Pokemonad.Core.Types (HP (..), Status (..))

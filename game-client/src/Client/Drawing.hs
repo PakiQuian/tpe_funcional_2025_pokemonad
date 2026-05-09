@@ -1,6 +1,19 @@
 module Client.Drawing
-  ( pokemonBlue,
-    pokemonYellow,
+  ( -- named color constants
+    panelBlueColor,
+    cursorYellowColor,
+    overlayDarkColor,
+    overlayMedColor,
+    footerBgColor,
+    dimTextColor,
+    hpBarGreenColor,
+    hpBarYellowColor,
+    hpBarRedColor,
+    hpTrackColor,
+    hudBgColor,
+    subtitleBlueColor,
+    panelBorderColor,
+    -- drawing helpers
     drawLogo,
     drawCenteredText,
     drawTextWithShadow,
@@ -25,11 +38,52 @@ import Graphics.Gloss
   )
 import Graphics.Gloss.Juicy (loadJuicyPNG)
 
-pokemonBlue :: Color
-pokemonBlue = makeColorI 0 50 120 255
+-- ---------------------------------------------------------------------------
+-- Named color constants
+-- ---------------------------------------------------------------------------
 
-pokemonYellow :: Color
-pokemonYellow = makeColorI 255 200 0 255
+panelBlueColor :: Color
+panelBlueColor = makeColorI 0 50 120 255
+
+cursorYellowColor :: Color
+cursorYellowColor = makeColorI 255 200 0 255
+
+overlayDarkColor :: Color
+overlayDarkColor = makeColorI 0 0 0 220
+
+overlayMedColor :: Color
+overlayMedColor = makeColorI 0 0 0 190
+
+footerBgColor :: Color
+footerBgColor = makeColorI 0 0 0 200
+
+dimTextColor :: Color
+dimTextColor = makeColorI 180 180 180 255
+
+hpBarGreenColor :: Color
+hpBarGreenColor = makeColorI 50 200 50 255
+
+hpBarYellowColor :: Color
+hpBarYellowColor = makeColorI 200 200 50 255
+
+hpBarRedColor :: Color
+hpBarRedColor = makeColorI 200 50 50 255
+
+hpTrackColor :: Color
+hpTrackColor = makeColorI 100 100 100 255
+
+hudBgColor :: Color
+hudBgColor = makeColorI 255 255 255 200
+
+subtitleBlueColor :: Color
+subtitleBlueColor = makeColorI 200 220 255 255
+
+panelBorderColor :: Color
+panelBorderColor = makeColorI 170 215 255 255
+
+-- ---------------------------------------------------------------------------
+-- Drawing helpers
+-- ---------------------------------------------------------------------------
 
 drawLogo :: Picture -> Picture
 drawLogo logo = translate 0 250 $ scale 0.8 0.8 logo

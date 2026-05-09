@@ -5,12 +5,13 @@ module Pokemonad.Battle.Turn
   )
 where
 
+import Pokemonad.AI.Decision (QWeights, chooseEnemyActionWithMaybeWeights)
 import Pokemonad.Battle.Damage (canAttack, doesMoveHit, getAttackStat, getDefenseStat, resolveDamage)
 import Pokemonad.Battle.Logic (isAvailableForSwitch, resolveTurnAfterDamage, switchActive, updatePokemonAfterDamage)
 import Pokemonad.Battle.State
   ( BattleAction (..),
-    BattlePokemon (..),
     BattlePhase (..),
+    BattlePokemon (..),
     BattleState (..),
     Side (..),
     Winner (..),
@@ -18,7 +19,6 @@ import Pokemonad.Battle.State
     getBench,
     setActive,
   )
-import Pokemonad.AI.Decision (QWeights, chooseEnemyActionWithMaybeWeights)
 import Pokemonad.Core.Move (Move (..))
 import Pokemonad.Core.Pokemon (Pokemon (..))
 import Pokemonad.Core.Types (HP (..), Level (..), PokemonType (..), Stats (..))
@@ -86,34 +86,39 @@ executeTurn rng bState playerAction enemyAction =
                  in (s2, l1, l2, r2)
             | playerDidSwitch =
                 let (s1, l1, r1) = applyAction PlayerSide rng bState playerAction
-                    (s2, l2, r2) = if unHP (battlePokemonHp (enemyActive s1)) <= 0
-                                     then (s1, [], r1)
-                                     else applyAction EnemySide r1 s1 enemyAction
+                    (s2, l2, r2) =
+                      if unHP (battlePokemonHp (enemyActive s1)) <= 0
+                        then (s1, [], r1)
+                        else applyAction EnemySide r1 s1 enemyAction
                  in (s2, l1, l2, r2)
             | enemyDidSwitch =
                 let (s1, l1, r1) = applyAction EnemySide rng bState enemyAction
-                    (s2, l2, r2) = if unHP (battlePokemonHp (playerActive s1)) <= 0
-                                     then (s1, [], r1)
-                                     else applyAction PlayerSide r1 s1 playerAction
+                    (s2, l2, r2) =
+                      if unHP (battlePokemonHp (playerActive s1)) <= 0
+                        then (s1, [], r1)
+                        else applyAction PlayerSide r1 s1 playerAction
                  in (s2, l1, l2, r2)
             | otherwise =
-                let playerFirst = statsSpeed (pokemonStats (battlePokemonBase (playerActive bState)))
-                                > statsSpeed (pokemonStats (battlePokemonBase (enemyActive bState)))
+                let playerFirst =
+                      statsSpeed (pokemonStats (battlePokemonBase (playerActive bState)))
+                        > statsSpeed (pokemonStats (battlePokemonBase (enemyActive bState)))
                     (firstSide, firstAction, secondSide, secondAction) =
                       if playerFirst
                         then (PlayerSide, playerAction, EnemySide, enemyAction)
                         else (EnemySide, enemyAction, PlayerSide, playerAction)
                     (s1, l1, r1) = applyAction firstSide rng bState firstAction
                     defenderFainted = unHP (battlePokemonHp (getActive secondSide s1)) <= 0
-                    (s2, l2, r2) = if defenderFainted
-                                     then (s1, [], r1)
-                                     else applyAction secondSide r1 s1 secondAction
+                    (s2, l2, r2) =
+                      if defenderFainted
+                        then (s1, [], r1)
+                        else applyAction secondSide r1 s1 secondAction
                  in (s2, l1, l2, r2)
           (resolved, postLogs) = resolveTurnAfterDamage afterActions
-          finalState = resolved
-            { turnCount = turnCount bState + 1,
-              battleLog = battleLog resolved ++ logsFirst ++ logsSecond ++ postLogs
-            }
+          finalState =
+            resolved
+              { turnCount = turnCount bState + 1,
+                battleLog = battleLog resolved ++ logsFirst ++ logsSecond ++ postLogs
+              }
        in (finalState, rngFinal)
 
 submitPlayerActionWithEnemyWeights :: Maybe QWeights -> StdGen -> BattleState -> BattleAction -> (BattleState, StdGen)

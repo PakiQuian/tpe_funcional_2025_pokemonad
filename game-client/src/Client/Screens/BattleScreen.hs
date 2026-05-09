@@ -1,19 +1,25 @@
 module Client.Screens.BattleScreen (drawBattleScreen) where
 
+import Client.Drawing
+  ( cursorYellowColor,
+    dimTextColor,
+    drawTextWithShadow,
+    hpBarGreenColor,
+    hpBarRedColor,
+    hpBarYellowColor,
+    hpTrackColor,
+    hudBgColor,
+    overlayDarkColor,
+    overlayMedColor,
+  )
+import Client.Types (BattleMenuType (..))
 import Data.Char (toUpper)
 import qualified Data.Map as Map
-import Client.Drawing (drawTextWithShadow, pokemonYellow)
-import Client.Types (BattleMenuType (..))
-import Pokemonad.Battle.State (BattlePhase (..), BattlePokemon (..), BattleState (..))
-import Pokemonad.Core.Move (Move (..))
-import Pokemonad.Core.Pokemon (Pokemon (..))
-import Pokemonad.Core.Types (HP (..), PokemonId (..))
 import Graphics.Gloss
   ( Picture,
     black,
     blank,
     color,
-    makeColorI,
     pictures,
     polygon,
     rectangleSolid,
@@ -23,6 +29,10 @@ import Graphics.Gloss
     translate,
     white,
   )
+import Pokemonad.Battle.State (BattlePhase (..), BattlePokemon (..), BattleState (..))
+import Pokemonad.Core.Move (Move (..))
+import Pokemonad.Core.Pokemon (Pokemon (..))
+import Pokemonad.Core.Types (HP (..), PokemonId (..))
 
 drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map PokemonId Picture -> Map.Map PokemonId Picture -> Int -> BattleMenuType -> Int -> Int -> Picture
 drawBattleScreen backgrounds bgIndex maybeState pokeFrontSprites pokeBackSprites menuIndex menuType moveIndex benchIndex =
@@ -51,7 +61,7 @@ drawBattleLogWindow logs =
           shownLogs
    in translate (-330) 220 $
         pictures
-          [ color (makeColorI 0 0 0 190) $ rectangleSolid 560 220,
+          [ color overlayMedColor $ rectangleSolid 560 220,
             color white $ rectangleWire 560 220,
             title,
             pictures linePictures
@@ -86,15 +96,15 @@ drawHUD bp =
       maxHp = unHP (battlePokemonMaxHp bp)
       pct = fromIntegral currentHp / fromIntegral (max 1 maxHp) :: Float
       barColor
-        | pct > 0.5 = makeColorI 50 200 50 255
-        | pct > 0.2 = makeColorI 200 200 50 255
-        | otherwise = makeColorI 200 50 50 255
+        | pct > 0.5 = hpBarGreenColor
+        | pct > 0.2 = hpBarYellowColor
+        | otherwise = hpBarRedColor
       width = 170 * pct
    in pictures
-        [ color (makeColorI 255 255 255 200) $ rectangleSolid 265 65,
+        [ color hudBgColor $ rectangleSolid 265 65,
           color black $ rectangleWire 265 65,
           translate (-120) 8 $ scale 0.15 0.15 $ color black $ text (pokemonName (battlePokemonBase bp)),
-          translate (-35) (-13) $ color (makeColorI 100 100 100 255) $ rectangleSolid 170 10,
+          translate (-35) (-13) $ color hpTrackColor $ rectangleSolid 170 10,
           translate (-35 - (170 - width) / 2) (-13) $ color barColor $ rectangleSolid width 10,
           translate 60 (-18) $ scale 0.12 0.12 $ color black $ text (show currentHp ++ "/" ++ show maxHp)
         ]
@@ -117,7 +127,7 @@ drawBattleMenu battlePhase activePokemon bench menuIdx menuType moveIdx benchIdx
 drawMainMenu :: BattlePokemon -> Int -> Picture
 drawMainMenu activePokemon menuIdx =
   pictures
-    [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+    [ color overlayDarkColor $ rectangleSolid 1280 160,
       color white $ rectangleWire 1270 150,
       translate (-580) 20 $ scale 0.25 0.25 $ color white $ text ("What will " ++ pokemonName (battlePokemonBase activePokemon) ++ " do?"),
       translate 350 0 $ drawOptionsGrid menuIdx
@@ -137,10 +147,10 @@ drawFightMenu activePokemon moveIdx =
   let moves = battlePokemonMoves activePokemon
       selectedMove = if moveIdx < length moves then Just (moves !! moveIdx) else Nothing
    in pictures
-        [ translate (-200) 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 880 160,
+        [ translate (-200) 0 $ color overlayDarkColor $ rectangleSolid 880 160,
           translate (-200) 0 $ color white $ rectangleWire 870 150,
           translate (-200) 0 $ drawMovesGrid moves moveIdx,
-          translate 450 0 $ color (makeColorI 0 0 0 220) $ rectangleSolid 380 160,
+          translate 450 0 $ color overlayDarkColor $ rectangleSolid 380 160,
           translate 450 0 $ color white $ rectangleWire 370 150,
           translate 450 0 $ drawMoveDetails selectedMove
         ]
@@ -169,7 +179,7 @@ drawMoveDetails (Just move) =
 drawPokemonMenu :: [BattlePokemon] -> Int -> Picture
 drawPokemonMenu bench benchIdx =
   pictures
-    [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+    [ color overlayDarkColor $ rectangleSolid 1280 160,
       color white $ rectangleWire 1270 150,
       translate (-580) 20 $ scale 0.2 0.2 $ color white $ text "Choose a POKEMON.",
       translate (-200) 40 $ pictures $ zipWith (drawBenchSlot benchIdx) [0 ..] bench
@@ -178,7 +188,7 @@ drawPokemonMenu bench benchIdx =
 drawForcedPokemonMenu :: [BattlePokemon] -> Int -> Picture
 drawForcedPokemonMenu bench benchIdx =
   pictures
-    [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+    [ color overlayDarkColor $ rectangleSolid 1280 160,
       color white $ rectangleWire 1270 150,
       translate (-580) 35 $ scale 0.2 0.2 $ color white $ text "Your Pokemon fainted!",
       translate (-580) 10 $ scale 0.2 0.2 $ color white $ text "Choose a replacement.",
@@ -192,9 +202,9 @@ drawBenchSlot selectedIndex index bp =
       isSwitchable = currentHp > 0
       isSelected = index == selectedIndex && isSwitchable
       txtColor
-        | not isSwitchable = makeColorI 220 80 80 255
+        | not isSwitchable = hpBarRedColor
         | isSelected = white
-        | otherwise = makeColorI 180 180 180 255
+        | otherwise = dimTextColor
       nameStr = pokemonName (battlePokemonBase bp)
       hpStr =
         if isSwitchable
@@ -206,16 +216,17 @@ drawBenchSlot selectedIndex index bp =
         | index < 4 = -40
         | otherwise = -80 :: Float
       txt = translate xPos yPos $ scale 0.18 0.18 $ color txtColor $ text (nameStr ++ "   " ++ hpStr)
-      cursor = if isSelected then translate (xPos - 25) (yPos + 5) $ color pokemonYellow $ polygon [(0, 0), (0, 15), (12, 7.5)] else blank
+      cursor = if isSelected then translate (xPos - 25) (yPos + 5) $ color cursorYellowColor $ polygon [(0, 0), (0, 15), (12, 7.5)] else blank
    in pictures [cursor, txt]
 
 drawSwitchConfirmMenu :: [BattlePokemon] -> Int -> Int -> Picture
 drawSwitchConfirmMenu bench benchIdx moveIdx =
-  let targetName = if benchIdx >= 0 && benchIdx < length bench
-                     then pokemonName (battlePokemonBase (bench !! benchIdx))
-                     else "???"
+  let targetName =
+        if benchIdx >= 0 && benchIdx < length bench
+          then pokemonName (battlePokemonBase (bench !! benchIdx))
+          else "???"
    in pictures
-        [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+        [ color overlayDarkColor $ rectangleSolid 1280 160,
           color white $ rectangleWire 1270 150,
           translate (-580) 20 $ scale 0.25 0.25 $ color white $ text ("Switch to " ++ targetName ++ "?"),
           translate 350 0 $
@@ -228,7 +239,7 @@ drawSwitchConfirmMenu bench benchIdx moveIdx =
 drawQuitMenu :: Int -> Picture
 drawQuitMenu moveIdx =
   pictures
-    [ color (makeColorI 0 0 0 220) $ rectangleSolid 1280 160,
+    [ color overlayDarkColor $ rectangleSolid 1280 160,
       color white $ rectangleWire 1270 150,
       translate (-580) 20 $ scale 0.25 0.25 $ color white $ text "Are you sure you want to quit?",
       translate 350 0 $
@@ -241,9 +252,9 @@ drawQuitMenu moveIdx =
 drawMenuOption :: Int -> String -> Float -> Float -> Int -> Picture
 drawMenuOption index label xPos yPos selectedIndex =
   let isSelected = index == selectedIndex
-      txtColor = if isSelected then white else makeColorI 180 180 180 255
+      txtColor = if isSelected then white else dimTextColor
       txt = translate xPos yPos $ scale 0.2 0.2 $ color txtColor $ text label
-      cursor = if isSelected then translate (xPos - 25) (yPos + 3) $ color pokemonYellow $ polygon [(0, 0), (0, 15), (12, 7.5)] else blank
+      cursor = if isSelected then translate (xPos - 25) (yPos + 3) $ color cursorYellowColor $ polygon [(0, 0), (0, 15), (12, 7.5)] else blank
    in pictures [cursor, txt]
 
 drawMoveOption :: Int -> String -> Float -> Float -> Int -> Picture

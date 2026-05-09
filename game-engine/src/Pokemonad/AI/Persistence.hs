@@ -70,11 +70,12 @@ decodeCheckpoint raw = do
   bestScore <- maybe (Just (-1.0e30)) readMaybe (lookupKey "best_score" pairs)
   parsedBias <- readMaybe biasStr
   parsedCoeffs <- mapM readMaybe (splitByComma coeffsStr)
-  pure AICheckpointData
-    { checkpointWeights = QWeights {weightsBias = parsedBias, weightsCoefficients = parsedCoeffs},
-      checkpointTotalEpochs = totalEpochs,
-      checkpointBestScore = bestScore
-    }
+  pure
+    AICheckpointData
+      { checkpointWeights = QWeights {weightsBias = parsedBias, weightsCoefficients = parsedCoeffs},
+        checkpointTotalEpochs = totalEpochs,
+        checkpointBestScore = bestScore
+      }
   where
     pairs = map parseLine (lines raw)
 

@@ -1,9 +1,7 @@
 module Client.Screens.TeamSelectScreen (drawTeamSelectScreen) where
 
+import Client.Drawing (cursorYellowColor, drawLogo, drawTextWithShadow, panelBlueColor)
 import qualified Data.Map as Map
-import Client.Drawing (drawLogo, drawTextWithShadow, pokemonBlue, pokemonYellow)
-import Pokemonad.Core.Pokemon (Pokemon (..), allPokemon)
-import Pokemonad.Core.Types (PokemonId (..))
 import Graphics.Gloss
   ( Picture,
     blank,
@@ -19,6 +17,8 @@ import Graphics.Gloss
     translate,
     white,
   )
+import Pokemonad.Core.Pokemon (Pokemon (..), allPokemon)
+import Pokemonad.Core.Types (PokemonId (..))
 
 drawTeamSelectScreen :: Picture -> Picture -> PokemonId -> [PokemonId] -> Map.Map PokemonId Picture -> Picture
 drawTeamSelectScreen menuBgImage logoImage selectedId team spriteMap =
@@ -34,7 +34,7 @@ drawSelectionBox :: PokemonId -> [PokemonId] -> Map.Map PokemonId Picture -> Pic
 drawSelectionBox selectedId team spriteMap =
   pictures
     [ color white $ rectangleSolid 520 440,
-      color pokemonBlue $ rectangleSolid 500 420,
+      color panelBlueColor $ rectangleSolid 500 420,
       color white $ translate 0 0 $ rectangleSolid 2 400,
       translate (-120) 0 $ drawScrollingList selectedId team,
       translate 120 0 $ drawPokemonDisplay selectedId spriteMap
@@ -44,7 +44,7 @@ drawTeamGrid :: [PokemonId] -> Map.Map PokemonId Picture -> Picture
 drawTeamGrid team spriteMap =
   pictures
     [ color white $ rectangleSolid 520 440,
-      color pokemonBlue $ rectangleSolid 500 420,
+      color panelBlueColor $ rectangleSolid 500 420,
       translate 0 170 $ drawTextWithShadow ("TEAM (" ++ show (length team) ++ "/6)") 0.2 0 white,
       drawSlots team spriteMap
     ]
@@ -101,11 +101,11 @@ drawScrollingList selectedId team = pictures (zipWith drawEntry visiblePokemon [
             | isInTeam = makeColorI 100 255 100 255
             | isSelected = white
             | otherwise = makeColorI 180 180 180 255
-          txtNum = translate (-110) yPos $ scale 0.12 0.12 $ color pokemonYellow $ text ("#" ++ formatNumber (unPokemonId (pokemonId p)))
+          txtNum = translate (-110) yPos $ scale 0.12 0.12 $ color cursorYellowColor $ text ("#" ++ formatNumber (unPokemonId (pokemonId p)))
           txtName = translate (-60) yPos $ scale 0.12 0.12 $ color nameColor $ text (take 10 (pokemonName p))
           cursor =
             if isSelected
-              then translate (-125) (yPos + 2) $ color pokemonYellow $ polygon [(0, 0), (0, 10), (8, 5)]
+              then translate (-125) (yPos + 2) $ color cursorYellowColor $ polygon [(0, 0), (0, 10), (8, 5)]
               else blank
        in pictures [cursor, txtNum, txtName]
 

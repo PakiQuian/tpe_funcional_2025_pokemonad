@@ -6,7 +6,7 @@ module Pokemonad.Core.Pokemon
 where
 
 import Pokemonad.Core.Move (Move, getMoveByName)
-import Pokemonad.Core.Types (PokemonType (..), Stats (..), PokemonId (..))
+import Pokemonad.Core.Types (PokemonId (..), PokemonType (..), Stats (..))
 
 data Pokemon = Pokemon
   { pokemonId :: PokemonId,
@@ -45,7 +45,7 @@ allPokemon =
         pokemonTypes = [Grass, Poison],
         pokemonStats = Stats 80 82 83 100 100 80,
         pokemonDescription = "The flower on its back catches the sun's rays.",
-        pokemonMoves = map getMoveByName ["Leech Seed", "Poisonpowder", "Solarbeam", "Take down"]
+        pokemonMoves = map getMoveByName ["Leech Seed", "Poisonpowder", "Solarbeam", "Take Down"]
       },
     -- ==========================================
     -- STARTERS KANTO (Fire)

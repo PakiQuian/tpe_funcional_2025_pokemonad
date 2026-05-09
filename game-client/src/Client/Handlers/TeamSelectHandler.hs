@@ -1,34 +1,44 @@
 module Client.Handlers.TeamSelectHandler
-  ( handleTeamSelectEnter,
+  ( handleUp,
+    handleDown,
+    handleEnter,
+    handleBack,
     handleRandomTeam,
-    addPokemonToTeam,
   )
 where
 
-import Client.State (GameState (..))
-import Client.Types (Screen (..))
+import Client.Types (Screen (..), TeamSelectState (..))
 import Pokemonad.Core.Pokemon (allPokemon)
 import Pokemonad.Core.Types (PokemonId (..))
 import System.Random (StdGen, randomR)
 
-handleTeamSelectEnter :: GameState -> GameState
-handleTeamSelectEnter state
-  | length (playerTeam state) == 6 = state {currentScreen = OpponentSelect}
-  | otherwise = addPokemonToTeam state
+handleUp :: TeamSelectState -> TeamSelectState
+handleUp s = s {teamSelectCursor = PokemonId (max 1 (unPokemonId (teamSelectCursor s) - 1))}
 
-addPokemonToTeam :: GameState -> GameState
-addPokemonToTeam state
-  | pid `elem` playerTeam state = state
-  | length (playerTeam state) >= 6 = state
-  | otherwise = state {playerTeam = playerTeam state ++ [pid]}
+handleDown :: TeamSelectState -> TeamSelectState
+handleDown s = s {teamSelectCursor = PokemonId (min (length allPokemon) (unPokemonId (teamSelectCursor s) + 1))}
+
+-- Returns (newState, newTeam, transition)
+handleEnter :: TeamSelectState -> [PokemonId] -> (TeamSelectState, [PokemonId], Maybe Screen)
+handleEnter s team
+  | length team == 6 = (s, team, Just OpponentSelect)
+  | pid `elem` team = (s, team, Nothing)
+  | length team >= 6 = (s, team, Nothing)
+  | otherwise = (s, team ++ [pid], Nothing)
   where
-    pid = selectedPokemonId state
+    pid = teamSelectCursor s
 
-handleRandomTeam :: GameState -> GameState
-handleRandomTeam state =
-  let maxId = length allPokemon
-      (newTeam, nextGen) = generateUniqueRandoms 6 maxId [] (randomGen state)
-   in state {playerTeam = newTeam, randomGen = nextGen}
+-- Returns (newState, newTeam, transition)
+handleBack :: TeamSelectState -> [PokemonId] -> (TeamSelectState, [PokemonId], Maybe Screen)
+handleBack s team
+  | null team = (s, team, Just Menu)
+  | otherwise = (s, init team, Nothing)
+
+-- Returns (newState, newRng, newTeam)
+handleRandomTeam :: TeamSelectState -> StdGen -> (TeamSelectState, StdGen, [PokemonId])
+handleRandomTeam s gen =
+  let (newTeam, nextGen) = generateUniqueRandoms 6 (length allPokemon) [] gen
+   in (s, nextGen, newTeam)
 
 generateUniqueRandoms :: Int -> Int -> [PokemonId] -> StdGen -> ([PokemonId], StdGen)
 generateUniqueRandoms 0 _ acc gen = (acc, gen)

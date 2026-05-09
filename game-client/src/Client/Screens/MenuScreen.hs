@@ -1,11 +1,10 @@
 module Client.Screens.MenuScreen (drawMenuScreen) where
 
-import Client.Drawing (drawLogo, pokemonBlue, pokemonYellow)
+import Client.Drawing (cursorYellowColor, dimTextColor, drawLogo, panelBlueColor)
 import Graphics.Gloss
   ( Picture,
     blank,
     color,
-    makeColorI,
     pictures,
     polygon,
     rectangleSolid,
@@ -41,7 +40,7 @@ drawMenuBox selection =
     pictures
       [ -- Caja de fondo del menú
         color white $ rectangleSolid 520 330, -- Borde Blanco
-        color pokemonBlue $ rectangleSolid 500 310, -- Fondo Azul
+        color panelBlueColor $ rectangleSolid 500 310, -- Fondo Azul
         translate (-200) 50 $ pictures (zipWith (drawOption selection) [0 ..] menuOptions)
       ]
 
@@ -52,7 +51,7 @@ drawOption currentSelection index label =
       yPos = fromIntegral index * (-60)
 
       -- Estilo del texto
-      txtColor = if isSelected then white else makeColorI 180 180 180 255
+      txtColor = if isSelected then white else dimTextColor
       txtScale = 0.25
 
       -- El texto renderizado
@@ -67,7 +66,7 @@ drawOption currentSelection index label =
         if isSelected
           then
             translate 10 (yPos + 3) $
-              color pokemonYellow $
+              color cursorYellowColor $
                 polygon [(0, 0), (0, 20), (15, 10)] -- Triángulo
           else blank
    in pictures [cursor, txtItem]

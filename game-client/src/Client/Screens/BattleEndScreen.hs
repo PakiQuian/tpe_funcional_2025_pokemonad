@@ -1,9 +1,7 @@
 module Client.Screens.BattleEndScreen (drawBattleEndScreen) where
 
-import Client.Drawing (pokemonBlue)
-import Pokemonad.Battle.State (BattleState, Winner (..))
-import Pokemonad.Core.Trainer (Trainer)
-import Pokemonad.Core.Types (PokemonId (..), TrainerId (..))
+import Client.Drawing (panelBlueColor)
+import qualified Data.Map as Map
 import Graphics.Gloss
   ( Picture,
     color,
@@ -15,7 +13,9 @@ import Graphics.Gloss
     translate,
     white,
   )
-import qualified Data.Map as Map
+import Pokemonad.Battle.State (BattleState, Winner (..))
+import Pokemonad.Core.Trainer (Trainer)
+import Pokemonad.Core.Types (PokemonId (..), TrainerId (..))
 
 -- Pantalla final simplificada: fondo + caja azul con resultado.
 drawBattleEndScreen :: Picture -> Winner -> Maybe BattleState -> Maybe Trainer -> Map.Map TrainerId Picture -> Map.Map PokemonId Picture -> Map.Map PokemonId Picture -> Picture
@@ -33,7 +33,7 @@ drawBattleEndScreen resultBg winner _maybeState _maybeTrainer _trainerSprites _p
           translate 0 40 $
             pictures
               [ color white $ rectangleSolid 620 250,
-                color pokemonBlue $ rectangleSolid 600 230,
+                color panelBlueColor $ rectangleSolid 600 230,
                 translate titleOffset 40 $ scale 0.35 0.35 $ color white $ text titleText,
                 translate subtitleOffset (-40) $ scale 0.18 0.18 $ color (makeColorI 220 220 220 255) $ text subtitleText
               ]

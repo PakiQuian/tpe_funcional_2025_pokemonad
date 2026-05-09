@@ -9,16 +9,16 @@ module Pokemonad.Core.Types
   )
 where
 
-newtype HP = HP { unHP :: Int }
+newtype HP = HP {unHP :: Int}
   deriving (Show, Eq, Ord)
 
-newtype Level = Level { unLevel :: Int }
+newtype Level = Level {unLevel :: Int}
   deriving (Show, Eq, Ord)
 
-newtype PokemonId = PokemonId { unPokemonId :: Int }
+newtype PokemonId = PokemonId {unPokemonId :: Int}
   deriving (Show, Eq, Ord)
 
-newtype TrainerId = TrainerId { unTrainerId :: Int }
+newtype TrainerId = TrainerId {unTrainerId :: Int}
   deriving (Show, Eq, Ord)
 
 data PokemonType

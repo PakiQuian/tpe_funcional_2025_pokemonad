@@ -1,10 +1,10 @@
 module Client.Handlers.BattleHandler
-  ( handleBattleUp,
-    handleBattleDown,
-    handleBattleLeft,
-    handleBattleRight,
-    handleBattleEnter,
-    handleBattleBack,
+  ( handleUp,
+    handleDown,
+    handleLeft,
+    handleRight,
+    handleEnter,
+    handleBack,
     isForcedSwitchPhase,
     firstSwitchableBenchIndex,
     firstSwitchableBenchIndexFromBattle,
@@ -12,179 +12,226 @@ module Client.Handlers.BattleHandler
     previousSwitchableBenchIndex,
     nextBattleMenuType,
     battleResultScreenFrom,
-    returnToMainMenu,
   )
 where
 
-import Client.State (GameState (..))
-import Client.Types (BattleMenuType (..), Screen (..))
+import Client.Types
+  ( BattleMenuType (..),
+    BattleScreenState (..),
+    Screen (..),
+    defaultBattleScreenState,
+  )
+import Pokemonad.AI.Model (QWeights)
 import Pokemonad.Battle.State
   ( BattleAction (..),
-    BattlePokemon (..),
     BattlePhase (..),
+    BattlePokemon (..),
     BattleState (..),
   )
 import Pokemonad.Battle.Turn (submitPlayerActionWithEnemyWeights)
 import Pokemonad.Core.Types (Status (..))
+import System.Random (StdGen)
 
-handleBattleUp :: GameState -> GameState
-handleBattleUp state =
-  if isForcedSwitchPhase state
-    then case battleMenuType state of
-      PokemonMenu -> state {battleBenchIndex = previousSwitchableBenchIndex state (battleBenchIndex state)}
-      _ -> state
-    else case battleMenuType state of
-      MainBattleMenu -> let c = battleMenuIndex state in state {battleMenuIndex = if c >= 2 then c - 2 else c}
-      FightMenu -> let c = battleMoveIndex state in state {battleMoveIndex = if c >= 2 then c - 2 else c}
-      PokemonMenu -> state {battleBenchIndex = previousSwitchableBenchIndex state (battleBenchIndex state)}
-      _ -> state
+-- ---------------------------------------------------------------------------
+-- Directional handlers
+-- ---------------------------------------------------------------------------
 
-handleBattleDown :: GameState -> GameState
-handleBattleDown state =
-  if isForcedSwitchPhase state
-    then case battleMenuType state of
-      PokemonMenu -> state {battleBenchIndex = nextSwitchableBenchIndex state (battleBenchIndex state)}
-      _ -> state
-    else case battleMenuType state of
-      MainBattleMenu -> let c = battleMenuIndex state in state {battleMenuIndex = if c <= 1 then c + 2 else c}
-      FightMenu -> let c = battleMoveIndex state in state {battleMoveIndex = if c <= 1 then c + 2 else c}
-      PokemonMenu -> state {battleBenchIndex = nextSwitchableBenchIndex state (battleBenchIndex state)}
-      _ -> state
+handleUp :: BattleScreenState -> BattleScreenState
+handleUp s =
+  if isForcedSwitchPhase s
+    then case battleMenuType s of
+      PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
+      _ -> s
+    else case battleMenuType s of
+      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = if c >= 2 then c - 2 else c}
+      FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if c >= 2 then c - 2 else c}
+      PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
+      _ -> s
 
-handleBattleLeft :: GameState -> GameState
-handleBattleLeft state =
-  if isForcedSwitchPhase state
-    then case battleMenuType state of
-      PokemonMenu -> state {battleBenchIndex = previousSwitchableBenchIndex state (battleBenchIndex state)}
-      SwitchConfirmMenu -> state {battleMoveIndex = 0}
-      _ -> state
-    else case battleMenuType state of
-      MainBattleMenu -> let c = battleMenuIndex state in state {battleMenuIndex = if odd c then c - 1 else c}
-      FightMenu -> let c = battleMoveIndex state in state {battleMoveIndex = if odd c then c - 1 else c}
-      PokemonMenu -> state {battleBenchIndex = previousSwitchableBenchIndex state (battleBenchIndex state)}
-      SwitchConfirmMenu -> state {battleMoveIndex = 0}
-      QuitConfirmMenu -> state {battleMoveIndex = 0}
-      _ -> state
+handleDown :: BattleScreenState -> BattleScreenState
+handleDown s =
+  if isForcedSwitchPhase s
+    then case battleMenuType s of
+      PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
+      _ -> s
+    else case battleMenuType s of
+      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = if c <= 1 then c + 2 else c}
+      FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if c <= 1 then c + 2 else c}
+      PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
+      _ -> s
 
-handleBattleRight :: GameState -> GameState
-handleBattleRight state =
-  if isForcedSwitchPhase state
-    then case battleMenuType state of
-      PokemonMenu -> state {battleBenchIndex = nextSwitchableBenchIndex state (battleBenchIndex state)}
-      SwitchConfirmMenu -> state {battleMoveIndex = 1}
-      _ -> state
-    else case battleMenuType state of
-      MainBattleMenu -> let c = battleMenuIndex state in state {battleMenuIndex = if even c then c + 1 else c}
-      FightMenu -> let c = battleMoveIndex state in state {battleMoveIndex = if even c then c + 1 else c}
-      PokemonMenu -> state {battleBenchIndex = nextSwitchableBenchIndex state (battleBenchIndex state)}
-      SwitchConfirmMenu -> state {battleMoveIndex = 1}
-      QuitConfirmMenu -> state {battleMoveIndex = 1}
-      _ -> state
+handleLeft :: BattleScreenState -> BattleScreenState
+handleLeft s =
+  if isForcedSwitchPhase s
+    then case battleMenuType s of
+      PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
+      SwitchConfirmMenu -> s {battleMoveCursor = 0}
+      _ -> s
+    else case battleMenuType s of
+      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = if odd c then c - 1 else c}
+      FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if odd c then c - 1 else c}
+      PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
+      SwitchConfirmMenu -> s {battleMoveCursor = 0}
+      QuitConfirmMenu -> s {battleMoveCursor = 0}
+      _ -> s
 
-handleBattleEnter :: GameState -> GameState
-handleBattleEnter state =
-  if isForcedSwitchPhase state
-    then case battleMenuType state of
+handleRight :: BattleScreenState -> BattleScreenState
+handleRight s =
+  if isForcedSwitchPhase s
+    then case battleMenuType s of
+      PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
+      SwitchConfirmMenu -> s {battleMoveCursor = 1}
+      _ -> s
+    else case battleMenuType s of
+      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = if even c then c + 1 else c}
+      FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if even c then c + 1 else c}
+      PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
+      SwitchConfirmMenu -> s {battleMoveCursor = 1}
+      QuitConfirmMenu -> s {battleMoveCursor = 1}
+      _ -> s
+
+-- ---------------------------------------------------------------------------
+-- Enter handler — returns (newState, newRng, maybeTransition)
+-- ---------------------------------------------------------------------------
+
+handleEnter ::
+  BattleScreenState ->
+  Maybe QWeights ->
+  StdGen ->
+  (BattleScreenState, StdGen, Maybe Screen)
+handleEnter s weights gen =
+  if isForcedSwitchPhase s
+    then case battleMenuType s of
       PokemonMenu ->
-        case battleState state of
+        case currentBattle s of
           Just bState ->
-            if battleBenchIndex state < length (playerBench bState)
-              then state {battleMenuType = SwitchConfirmMenu, battleMoveIndex = 0}
-              else state
-          Nothing -> state
+            if battleBenchCursor s < length (playerBench bState)
+              then (s {battleMenuType = SwitchConfirmMenu, battleMoveCursor = 0}, gen, Nothing)
+              else (s, gen, Nothing)
+          Nothing -> (s, gen, Nothing)
       SwitchConfirmMenu ->
-        case battleMoveIndex state of
-          0 -> submitSelectedSwitch state
-          1 -> state {battleMenuType = PokemonMenu}
-          _ -> state
+        case battleMoveCursor s of
+          0 -> submitSelectedSwitch s weights gen
+          1 -> (s {battleMenuType = PokemonMenu}, gen, Nothing)
+          _ -> (s, gen, Nothing)
       _ ->
-        state {battleMenuType = PokemonMenu, battleMoveIndex = 0, battleBenchIndex = firstSwitchableBenchIndex state}
-    else case battleMenuType state of
+        ( s
+            { battleMenuType = PokemonMenu,
+              battleMoveCursor = 0,
+              battleBenchCursor = firstSwitchableBenchIndex s
+            },
+          gen,
+          Nothing
+        )
+    else case battleMenuType s of
       MainBattleMenu ->
-        case battleMenuIndex state of
-          0 -> state {battleMenuType = FightMenu, battleMoveIndex = 0}
-          2 -> state {battleMenuType = PokemonMenu, battleBenchIndex = firstSwitchableBenchIndex state}
-          3 -> state {battleMenuType = QuitConfirmMenu, battleMoveIndex = 1}
-          _ -> state
-      FightMenu -> submitSelectedMove state
-      BagMenu -> state
+        case battleMainCursor s of
+          0 -> (s {battleMenuType = FightMenu, battleMoveCursor = 0}, gen, Nothing)
+          2 -> (s {battleMenuType = PokemonMenu, battleBenchCursor = firstSwitchableBenchIndex s}, gen, Nothing)
+          3 -> (s {battleMenuType = QuitConfirmMenu, battleMoveCursor = 1}, gen, Nothing)
+          _ -> (s, gen, Nothing)
+      FightMenu ->
+        submitSelectedMove s weights gen
+      BagMenu -> (s, gen, Nothing)
       PokemonMenu ->
-        case battleState state of
+        case currentBattle s of
           Just bState ->
-            if battleBenchIndex state < length (playerBench bState)
-              then state {battleMenuType = SwitchConfirmMenu, battleMoveIndex = 0}
-              else state
-          Nothing -> state
+            if battleBenchCursor s < length (playerBench bState)
+              then (s {battleMenuType = SwitchConfirmMenu, battleMoveCursor = 0}, gen, Nothing)
+              else (s, gen, Nothing)
+          Nothing -> (s, gen, Nothing)
       SwitchConfirmMenu ->
-        case battleMoveIndex state of
-          0 -> submitSelectedSwitch state
-          1 -> state {battleMenuType = PokemonMenu}
-          _ -> state
+        case battleMoveCursor s of
+          0 -> submitSelectedSwitch s weights gen
+          1 -> (s {battleMenuType = PokemonMenu}, gen, Nothing)
+          _ -> (s, gen, Nothing)
       QuitConfirmMenu ->
-        case battleMoveIndex state of
-          0 ->
-            state
-              { currentScreen = Menu,
-                battleMenuType = MainBattleMenu,
-                battleState = Nothing,
-                battleMoveIndex = 0,
-                battleMenuIndex = 0,
-                selectedTrainer = Nothing,
-                selectedTrainerIndex = 0,
-                playerTeam = []
+        case battleMoveCursor s of
+          0 -> (defaultBattleScreenState, gen, Just Menu)
+          1 -> (s {battleMenuType = MainBattleMenu}, gen, Nothing)
+          _ -> (s, gen, Nothing)
+
+-- ---------------------------------------------------------------------------
+-- Back handler
+-- ---------------------------------------------------------------------------
+
+handleBack :: BattleScreenState -> BattleScreenState
+handleBack s =
+  if isForcedSwitchPhase s
+    then case battleMenuType s of
+      SwitchConfirmMenu -> s {battleMenuType = PokemonMenu, battleMoveCursor = 0}
+      _ -> s
+    else case battleMenuType s of
+      FightMenu -> s {battleMenuType = MainBattleMenu}
+      BagMenu -> s {battleMenuType = MainBattleMenu}
+      PokemonMenu -> s {battleMenuType = MainBattleMenu}
+      SwitchConfirmMenu -> s {battleMenuType = PokemonMenu, battleMoveCursor = 0}
+      QuitConfirmMenu -> s {battleMenuType = MainBattleMenu}
+      _ -> s
+
+-- ---------------------------------------------------------------------------
+-- Move / switch submission
+-- ---------------------------------------------------------------------------
+
+submitSelectedMove ::
+  BattleScreenState ->
+  Maybe QWeights ->
+  StdGen ->
+  (BattleScreenState, StdGen, Maybe Screen)
+submitSelectedMove s weights gen =
+  case currentBattle s of
+    Nothing -> (s, gen, Nothing)
+    Just bState ->
+      let action = ActionMove (battleMoveCursor s)
+          (nextBattle, nextRng) = submitPlayerActionWithEnemyWeights weights gen bState action
+          nextScreen = battleResultScreenFrom nextBattle
+          nextMenuType = nextBattleMenuType nextBattle
+          nextBenchCursor = firstSwitchableBenchIndexFromBattle nextBattle
+          newState =
+            s
+              { currentBattle = Just nextBattle,
+                battleMoveCursor = 0,
+                battleBenchCursor = nextBenchCursor,
+                battleMenuType = nextMenuType
               }
-          1 -> state {battleMenuType = MainBattleMenu}
-          _ -> state
+       in ( newState,
+            nextRng,
+            if nextScreen == BattleScreen then Nothing else Just nextScreen
+          )
 
-handleBattleBack :: GameState -> GameState
-handleBattleBack state =
-  if isForcedSwitchPhase state
-    then case battleMenuType state of
-      SwitchConfirmMenu -> state {battleMenuType = PokemonMenu, battleMoveIndex = 0}
-      _ -> state
-    else case battleMenuType state of
-      FightMenu -> state {battleMenuType = MainBattleMenu}
-      BagMenu -> state {battleMenuType = MainBattleMenu}
-      PokemonMenu -> state {battleMenuType = MainBattleMenu}
-      SwitchConfirmMenu -> state {battleMenuType = PokemonMenu, battleMoveIndex = 0}
-      QuitConfirmMenu -> state {battleMenuType = MainBattleMenu}
-      _ -> state
-
-submitSelectedMove :: GameState -> GameState
-submitSelectedMove state =
-  case battleState state of
-    Nothing -> state
+submitSelectedSwitch ::
+  BattleScreenState ->
+  Maybe QWeights ->
+  StdGen ->
+  (BattleScreenState, StdGen, Maybe Screen)
+submitSelectedSwitch s weights gen =
+  case currentBattle s of
+    Nothing -> (s, gen, Nothing)
     Just bState ->
-      let action = ActionMove (battleMoveIndex state)
-          (nextBattle, nextRng) = submitPlayerActionWithEnemyWeights (enemyAIWeights state) (randomGen state) bState action
-       in state
-            { battleState = Just nextBattle,
-              randomGen = nextRng,
-              currentScreen = battleResultScreenFrom nextBattle,
-              battleMenuType = nextBattleMenuType nextBattle,
-              battleMoveIndex = 0,
-              battleBenchIndex = firstSwitchableBenchIndexFromBattle nextBattle
-            }
+      let action = ActionSwitch (battleBenchCursor s)
+          (nextBattle, nextRng) = submitPlayerActionWithEnemyWeights weights gen bState action
+          nextScreen = battleResultScreenFrom nextBattle
+          nextMenuType = nextBattleMenuType nextBattle
+          nextBenchCursor = firstSwitchableBenchIndexFromBattle nextBattle
+          newState =
+            s
+              { currentBattle = Just nextBattle,
+                battleMoveCursor = 0,
+                battleBenchCursor = nextBenchCursor,
+                battleMenuType = nextMenuType
+              }
+       in ( newState,
+            nextRng,
+            if nextScreen == BattleScreen then Nothing else Just nextScreen
+          )
 
-submitSelectedSwitch :: GameState -> GameState
-submitSelectedSwitch state =
-  case battleState state of
-    Nothing -> state
-    Just bState ->
-      let action = ActionSwitch (battleBenchIndex state)
-          (nextBattle, nextRng) = submitPlayerActionWithEnemyWeights (enemyAIWeights state) (randomGen state) bState action
-       in state
-            { battleState = Just nextBattle,
-              randomGen = nextRng,
-              currentScreen = battleResultScreenFrom nextBattle,
-              battleMenuType = nextBattleMenuType nextBattle,
-              battleMoveIndex = 0,
-              battleBenchIndex = firstSwitchableBenchIndexFromBattle nextBattle
-            }
+-- ---------------------------------------------------------------------------
+-- Predicates / helpers
+-- ---------------------------------------------------------------------------
 
-isForcedSwitchPhase :: GameState -> Bool
-isForcedSwitchPhase state =
-  case battleState state of
+isForcedSwitchPhase :: BattleScreenState -> Bool
+isForcedSwitchPhase s =
+  case currentBattle s of
     Just bState -> phase bState == WaitingForForcedPlayerSwitch
     Nothing -> False
 
@@ -199,22 +246,8 @@ battleResultScreenFrom bState =
     BattleEnded _ -> BattleResultScreen
     _ -> BattleScreen
 
-returnToMainMenu :: GameState -> GameState
-returnToMainMenu state =
-  state
-    { currentScreen = Menu,
-      battleState = Nothing,
-      battleMenuType = MainBattleMenu,
-      battleMenuIndex = 0,
-      battleMoveIndex = 0,
-      battleBenchIndex = 0,
-      selectedTrainer = Nothing,
-      selectedTrainerIndex = 0,
-      playerTeam = []
-    }
-
-firstSwitchableBenchIndex :: GameState -> Int
-firstSwitchableBenchIndex state = maybe 0 firstSwitchableBenchIndexFromBattle (battleState state)
+firstSwitchableBenchIndex :: BattleScreenState -> Int
+firstSwitchableBenchIndex s = maybe 0 firstSwitchableBenchIndexFromBattle (currentBattle s)
 
 firstSwitchableBenchIndexFromBattle :: BattleState -> Int
 firstSwitchableBenchIndexFromBattle bState =
@@ -224,11 +257,14 @@ firstSwitchableBenchIndexFromBattle bState =
 
 switchableBenchIndices :: BattleState -> [Int]
 switchableBenchIndices bState =
-  [idx | (idx, bp) <- zip [0 ..] (playerBench bState), battlePokemonStatus bp /= Fainted]
+  [ idx
+  | (idx, bp) <- zip [0 ..] (playerBench bState),
+    battlePokemonStatus bp /= Fainted
+  ]
 
-nextSwitchableBenchIndex :: GameState -> Int -> Int
-nextSwitchableBenchIndex state current =
-  case battleState state of
+nextSwitchableBenchIndex :: BattleScreenState -> Int -> Int
+nextSwitchableBenchIndex s current =
+  case currentBattle s of
     Nothing -> current
     Just bState ->
       let valid = switchableBenchIndices bState
@@ -236,11 +272,11 @@ nextSwitchableBenchIndex state current =
             (x : _) -> x
             [] -> case valid of
               [] -> 0
-              _ -> head valid
+              (h : _) -> h
 
-previousSwitchableBenchIndex :: GameState -> Int -> Int
-previousSwitchableBenchIndex state current =
-  case battleState state of
+previousSwitchableBenchIndex :: BattleScreenState -> Int -> Int
+previousSwitchableBenchIndex s current =
+  case currentBattle s of
     Nothing -> current
     Just bState ->
       let valid = switchableBenchIndices bState

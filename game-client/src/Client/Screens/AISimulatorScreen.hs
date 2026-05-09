@@ -1,7 +1,15 @@
 module Client.Screens.AISimulatorScreen (drawAISimulatorScreen) where
 
-import Client.Drawing (drawLogo, drawTextWithShadow, pokemonBlue, pokemonYellow)
-import Client.State (GameState (..))
+import Client.Drawing
+  ( cursorYellowColor,
+    drawLogo,
+    drawTextWithShadow,
+    footerBgColor,
+    panelBlueColor,
+    panelBorderColor,
+    subtitleBlueColor,
+  )
+import Client.Types (AISimulatorState (..))
 import Graphics.Gloss
   ( Picture,
     blank,
@@ -17,34 +25,34 @@ import Graphics.Gloss
     white,
   )
 
-drawAISimulatorScreen :: Picture -> Picture -> GameState -> Picture
-drawAISimulatorScreen menuBgImage logoImage gs =
+drawAISimulatorScreen :: Picture -> Picture -> AISimulatorState -> Picture
+drawAISimulatorScreen menuBgImage logoImage ais =
   pictures
     [ menuBgImage,
       drawLogo logoImage,
-      drawMainPanel gs,
-      drawFooter (simulatorTraining gs)
+      drawMainPanel ais,
+      drawFooter (aiTraining ais)
     ]
 
-drawMainPanel :: GameState -> Picture
-drawMainPanel gs =
-  let training = simulatorTraining gs
-      logs = take 12 (simulatorLogs gs)
+drawMainPanel :: AISimulatorState -> Picture
+drawMainPanel ais =
+  let training = aiTraining ais
+      logs = take 12 (aiLogs ais)
    in pictures
         [ color white $ rectangleSolid 980 470,
-          color pokemonBlue $ rectangleSolid 960 450,
+          color panelBlueColor $ rectangleSolid 960 450,
           drawTextWithShadow "AI TRAINING SIMULATOR" 0.2 175 white,
-          drawTextWithShadow "Offline self-play  |  ENTER runs 100 epochs" 0.10 140 (makeColorI 200 220 255 255),
+          drawTextWithShadow "Offline self-play  |  ENTER runs 100 epochs" 0.10 140 subtitleBlueColor,
           drawRunButton training,
-          drawEpochCounter (simulatorTotalEpochs gs),
-          drawStatusBox training (simulatorStatus gs),
+          drawEpochCounter (aiTotalEpochs ais),
+          drawStatusBox training (aiStatus ais),
           drawLogsBox logs
         ]
 
 drawRunButton :: Bool -> Picture
 drawRunButton isTraining =
   let bgColor = if isTraining then makeColorI 50 50 50 160 else makeColorI 0 0 0 140
-      borderColor = if isTraining then makeColorI 100 100 100 200 else makeColorI 170 215 255 255
+      borderColor = if isTraining then makeColorI 100 100 100 200 else panelBorderColor
       label = if isTraining then "TRAINING IN PROGRESS..." else "START TRAINING  (100 epochs)"
       labelColor = if isTraining then makeColorI 140 140 140 255 else white
       labelX = -(fromIntegral (length label) * 78 * 0.13 / 2)
@@ -54,7 +62,7 @@ drawRunButton isTraining =
             color borderColor $ rectangleWire 500 46,
             if isTraining
               then blank
-              else translate (labelX - 22) (-9) $ color pokemonYellow $ polygon [(0, 0), (0, 14), (11, 7)],
+              else translate (labelX - 22) (-9) $ color cursorYellowColor $ polygon [(0, 0), (0, 14), (11, 7)],
             translate (labelX + 2) (-9) $
               scale 0.13 0.13 $
                 color labelColor $
@@ -71,12 +79,12 @@ drawEpochCounter totalEpochs =
 drawStatusBox :: Bool -> String -> Picture
 drawStatusBox isTraining statusLine =
   let statusColor = if isTraining then makeColorI 255 220 80 255 else white
-      labelX = -(fromIntegral (length clipped) * 78 * 0.11 / 2)
       clipped = clipText 80 statusLine
+      labelX = -(fromIntegral (length clipped) * 78 * 0.11 / 2)
    in translate 0 5 $
         pictures
           [ color (makeColorI 0 0 0 155) $ rectangleSolid 880 36,
-            color (makeColorI 170 215 255 255) $ rectangleWire 880 36,
+            color panelBorderColor $ rectangleWire 880 36,
             translate labelX (-7) $
               scale 0.11 0.11 $
                 color statusColor $
@@ -88,10 +96,10 @@ drawLogsBox logs =
   translate 0 (-120) $
     pictures
       [ color (makeColorI 0 0 0 150) $ rectangleSolid 860 200,
-        color (makeColorI 170 215 255 255) $ rectangleWire 860 200,
+        color panelBorderColor $ rectangleWire 860 200,
         translate (-385) 81 $
           scale 0.12 0.12 $
-            color (makeColorI 200 230 255 255) $
+            color subtitleBlueColor $
               text "Epoch logs (newest first)",
         pictures (zipWith drawLogLine [0 ..] logs)
       ]
@@ -108,7 +116,7 @@ drawFooter :: Bool -> Picture
 drawFooter isTraining =
   pictures
     [ translate 0 (-320) $
-        color (makeColorI 0 0 0 200) $
+        color footerBgColor $
           rectangleSolid 1280 52,
       drawTextWithShadow footerText 0.12 (-327) white
     ]

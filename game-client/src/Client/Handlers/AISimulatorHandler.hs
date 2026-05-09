@@ -2,11 +2,16 @@ module Client.Handlers.AISimulatorHandler
   ( launchAITrainingIfRequested,
     mergeAITraining,
     applyAIResult,
+    handleBack,
   )
 where
 
-import Client.State (GameState (..), World (..))
-import Client.Types (AITrainingResult (..), Screen (..))
+import Client.State (AppState (..), World (..))
+import Client.Types
+  ( AISimulatorState (..),
+    AITrainingResult (..),
+    Screen (..),
+  )
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (readTVar, writeTVar)
@@ -26,7 +31,7 @@ launchAITrainingIfRequested :: Event -> World -> IO World
 launchAITrainingIfRequested ev w
   | currentScreen gs /= AISimulator = pure w
   | not isEnterDown = pure w
-  | simulatorTraining gs = pure w
+  | aiTraining (aiSimState gs) = pure w
   | otherwise = do
       let rng = randomGen gs
       void $ forkIO $ do
@@ -68,8 +73,11 @@ launchAITrainingIfRequested ev w
         w
           { worldGame =
               gs
-                { simulatorTraining = True,
-                  simulatorStatus = "Training in progress..."
+                { aiSimState =
+                    (aiSimState gs)
+                      { aiTraining = True,
+                        aiStatus = "Training in progress..."
+                      }
                 }
           }
   where
@@ -88,16 +96,22 @@ mergeAITraining w = do
     Nothing -> pure w
     Just result -> pure w {worldGame = applyAIResult result (worldGame w)}
 
-applyAIResult :: AITrainingResult -> GameState -> GameState
+applyAIResult :: AITrainingResult -> AppState -> AppState
 applyAIResult result gs =
   gs
     { randomGen = atrRng result,
       enemyAIWeights = Just (atrWeights result),
-      simulatorTotalEpochs = atrTotalEpochs result,
-      simulatorStatus = atrStatus result,
-      simulatorLogs = atrLogs result ++ simulatorLogs gs,
-      simulatorTraining = False
+      aiSimState =
+        (aiSimState gs)
+          { aiTotalEpochs = atrTotalEpochs result,
+            aiStatus = atrStatus result,
+            aiLogs = atrLogs result ++ aiLogs (aiSimState gs),
+            aiTraining = False
+          }
     }
+
+handleBack :: AISimulatorState -> Maybe Screen
+handleBack _ = Just Menu
 
 formatEpochLine :: Int -> EpochMetrics -> String
 formatEpochLine epochOffset m =

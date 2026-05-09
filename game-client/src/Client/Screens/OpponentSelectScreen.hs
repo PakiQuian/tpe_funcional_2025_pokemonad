@@ -1,9 +1,7 @@
 module Client.Screens.OpponentSelectScreen (drawOpponentSelectScreen) where
 
+import Client.Drawing (cursorYellowColor, drawCenteredText, drawLogo, drawTextWithShadow, panelBlueColor)
 import qualified Data.Map as Map
-import Client.Drawing (drawCenteredText, drawLogo, drawTextWithShadow, pokemonBlue, pokemonYellow)
-import Pokemonad.Core.Trainer (AIDifficulty (..), Trainer (..), allTrainers)
-import Pokemonad.Core.Types (PokemonId (..), TrainerId (..))
 import Graphics.Gloss
   ( Picture,
     blank,
@@ -19,6 +17,8 @@ import Graphics.Gloss
     translate,
     white,
   )
+import Pokemonad.Core.Trainer (AIDifficulty (..), Trainer (..), allTrainers)
+import Pokemonad.Core.Types (PokemonId (..), TrainerId (..))
 
 drawOpponentSelectScreen :: Picture -> Picture -> Int -> Map.Map PokemonId Picture -> Map.Map TrainerId Picture -> Picture
 drawOpponentSelectScreen menuBgImage logoImage selectedIndex pokemonSpriteMap trainerSpriteMap =
@@ -34,7 +34,7 @@ drawOpponentBox selectedIndex pokemonSpriteMap trainerSpriteMap =
   translate 0 (-50) $
     pictures
       [ color white $ rectangleSolid 720 440,
-        color pokemonBlue $ rectangleSolid 700 420,
+        color panelBlueColor $ rectangleSolid 700 420,
         color white $ translate 0 (-20) $ rectangleSolid 2 350,
         translate 0 170 $ drawTextWithShadow "CHOOSE YOUR OPPONENT" 0.18 0 white,
         translate (-170) 0 $ drawTrainerList selectedIndex,
@@ -63,13 +63,13 @@ drawTrainerList selectedIndex = pictures $ zipWith drawTrainerEntry visibleTrain
             if isSelected
               then
                 translate (-160) (yPos + 2) $
-                  color pokemonYellow $
+                  color cursorYellowColor $
                     polygon [(0, 0), (0, 12), (10, 6)]
               else blank
           stars =
             translate (-140) (yPos - 15) $
               scale 0.12 0.12 $
-                color pokemonYellow $
+                color cursorYellowColor $
                   text (difficultyStars (trainerDifficulty trainer))
        in pictures [cursor, txtName, stars]
 
@@ -107,7 +107,7 @@ drawTrainerSprite tid spriteMap =
 drawMiniTeamGrid :: [PokemonId] -> Map.Map PokemonId Picture -> Picture
 drawMiniTeamGrid teamIds spriteMap =
   pictures
-    [ drawCenteredText "TEAM PREVIEW" 0.10 90 pokemonYellow,
+    [ drawCenteredText "TEAM PREVIEW" 0.10 90 cursorYellowColor,
       pictures $ zipWith (drawMiniSlot spriteMap) [0 ..] teamIds
     ]
 

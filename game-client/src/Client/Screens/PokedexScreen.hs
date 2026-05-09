@@ -1,8 +1,6 @@
 module Client.Screens.PokedexScreen (drawPokedexScreen) where
 
-import Client.Drawing (drawCenteredText, drawLogo, drawTextWithShadow, pokemonBlue, pokemonYellow)
-import Pokemonad.Core.Pokemon (Pokemon (..), allPokemon)
-import Pokemonad.Core.Types (PokemonId (..))
+import Client.Drawing (cursorYellowColor, drawCenteredText, drawLogo, drawTextWithShadow, panelBlueColor)
 import Graphics.Gloss
   ( Picture,
     blank,
@@ -17,6 +15,8 @@ import Graphics.Gloss
     translate,
     white,
   )
+import Pokemonad.Core.Pokemon (Pokemon (..), allPokemon)
+import Pokemonad.Core.Types (PokemonId (..))
 
 drawPokedexScreen :: Picture -> Picture -> PokemonId -> Maybe Picture -> Picture
 drawPokedexScreen menuBgImage logoImage selectedId currentSprite =
@@ -32,7 +32,7 @@ drawPokedexBox selectedId maybeSprite =
   translate 0 (-50) $
     pictures
       [ color white $ rectangleSolid 720 440,
-        color pokemonBlue $ rectangleSolid 700 420,
+        color panelBlueColor $ rectangleSolid 700 420,
         color white $ translate 0 0 $ rectangleSolid 2 400,
         translate (-170) 0 $ drawScrollingList selectedId,
         translate 170 0 $ drawPokemonDisplay maybeSprite
@@ -51,7 +51,7 @@ drawScrollingList selectedId = pictures (zipWith drawEntry visiblePokemon [0 ..]
       let isSelected = pokemonId p == selectedId
           yPos = 160 - (fromIntegral offset * 35)
           nameColor = if isSelected then white else makeColorI 180 180 180 255
-          numColor = pokemonYellow
+          numColor = cursorYellowColor
           txtNum =
             translate (-140) yPos $
               scale 0.12 0.12 $
@@ -66,7 +66,7 @@ drawScrollingList selectedId = pictures (zipWith drawEntry visiblePokemon [0 ..]
             if isSelected
               then
                 translate (-155) (yPos + 1) $
-                  color pokemonYellow $
+                  color cursorYellowColor $
                     polygon [(0, 0), (0, 10), (8, 5)]
               else blank
        in pictures [cursor, txtNum, txtName]

@@ -1,12 +1,20 @@
 module Client.Handlers.MultiplayerHandler
-  ( handleMultiplayerChar,
-    handleMultiplayerEnter,
+  ( handleChar,
+    handleEnter,
+    handleBack,
     startMultiplayerNet,
   )
 where
 
-import Client.State (GameState (..), World (..))
-import Client.Types (MultiplayerIntent (..), NetConnAsync (..), NetSubState (..))
+import Client.State (AppState (..), World (..))
+import Client.Types
+  ( MultiplayerIntent (..),
+    MultiplayerState (..),
+    NetConnAsync (..),
+    NetSubState (..),
+    Screen (..),
+    defaultMultiplayerState,
+  )
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (writeTVar)
@@ -27,37 +35,58 @@ parsePortStr s
 isHostChar :: Char -> Bool
 isHostChar c = isAlphaNum c || c `elem` (".-_" :: String)
 
-handleMultiplayerChar :: Char -> GameState -> GameState
-handleMultiplayerChar c state =
-  case multiplayerRow state of
+-- ---------------------------------------------------------------------------
+-- Pure handlers
+-- ---------------------------------------------------------------------------
+
+handleChar :: Char -> MultiplayerState -> MultiplayerState
+handleChar c ms =
+  case mpCursor ms of
     0 ->
       if isHostChar c
-        then state {multiplayerHost = multiplayerHost state ++ [c], multiplayerError = Nothing}
-        else state
+        then ms {mpHost = mpHost ms ++ [c], mpError = Nothing}
+        else ms
     1 ->
       if isDigit c
-        then state {multiplayerPort = multiplayerPort state ++ [c], multiplayerError = Nothing}
-        else state
-    _ -> state
+        then ms {mpPort = mpPort ms ++ [c], mpError = Nothing}
+        else ms
+    _ -> ms
 
-handleMultiplayerEnter :: GameState -> GameState
-handleMultiplayerEnter state =
-  case multiplayerRow state of
-    0 -> state {multiplayerRow = 1}
-    1 -> state {multiplayerRow = 2}
+handleEnter :: MultiplayerState -> MultiplayerState
+handleEnter ms =
+  case mpCursor ms of
+    0 -> ms {mpCursor = 1}
+    1 -> ms {mpCursor = 2}
     2 ->
-      case parsePortStr (multiplayerPort state) of
-        Nothing -> state {multiplayerError = Just "Invalid port (1-65535)."}
-        Just p -> state {multiplayerPending = Just (MPListen p), multiplayerError = Nothing}
+      case parsePortStr (mpPort ms) of
+        Nothing -> ms {mpError = Just "Invalid port (1-65535)."}
+        Just p -> ms {mpPending = Just (MPListen p), mpError = Nothing}
     3 ->
-      case parsePortStr (multiplayerPort state) of
-        Nothing -> state {multiplayerError = Just "Invalid port (1-65535)."}
+      case parsePortStr (mpPort ms) of
+        Nothing -> ms {mpError = Just "Invalid port (1-65535)."}
         Just p ->
-          let h = multiplayerHost state
+          let h = mpHost ms
            in if null h
-                then state {multiplayerError = Just "Please enter a host."}
-                else state {multiplayerPending = Just (MPConnect h p), multiplayerError = Nothing}
-    _ -> state
+                then ms {mpError = Just "Please enter a host."}
+                else ms {mpPending = Just (MPConnect h p), mpError = Nothing}
+    _ -> ms
+
+handleBack :: MultiplayerState -> (MultiplayerState, Maybe Screen)
+handleBack ms =
+  case mpCursor ms of
+    0 ->
+      if null (mpHost ms)
+        then (defaultMultiplayerState, Just Menu)
+        else (ms {mpHost = init (mpHost ms)}, Nothing)
+    1 ->
+      if null (mpPort ms)
+        then (ms {mpCursor = 0}, Nothing)
+        else (ms {mpPort = init (mpPort ms)}, Nothing)
+    _ -> (defaultMultiplayerState, Just Menu)
+
+-- ---------------------------------------------------------------------------
+-- IO networking (still uses World)
+-- ---------------------------------------------------------------------------
 
 runListen :: PortNumber -> World -> IO ()
 runListen port w = do
@@ -78,28 +107,19 @@ runConnect host port w = do
       atomically $ writeTVar (netConnAsync w) (Just $ NetConnOk sock NetInLobby)
 
 startMultiplayerNet :: MultiplayerIntent -> World -> IO World
-startMultiplayerNet intent w = case netSubState w of
-  NetListening _ ->
-    pure w {worldGame = (worldGame w) {multiplayerError = Just "Already listening."}}
-  NetConnecting _ _ ->
-    pure w {worldGame = (worldGame w) {multiplayerError = Just "Connection in progress."}}
-  NetInLobby ->
-    pure w {worldGame = (worldGame w) {multiplayerError = Just "Already connected."}}
-  NetInBattle ->
-    pure w {worldGame = (worldGame w) {multiplayerError = Just "In battle."}}
-  NetDisconnected ->
-    case intent of
-      MPListen port -> do
-        void $ forkIO (runListen port w)
-        pure
-          w
-            { netSubState = NetListening (fromIntegral port),
-              worldGame = (worldGame w) {multiplayerError = Nothing}
-            }
-      MPConnect host port -> do
-        void $ forkIO (runConnect host port w)
-        pure
-          w
-            { netSubState = NetConnecting host (fromIntegral port),
-              worldGame = (worldGame w) {multiplayerError = Nothing}
-            }
+startMultiplayerNet intent w =
+  let setErr msg = w {worldGame = (worldGame w) {multiplayerState = (multiplayerState (worldGame w)) {mpError = Just msg}}}
+      clearErr = w {worldGame = (worldGame w) {multiplayerState = (multiplayerState (worldGame w)) {mpError = Nothing}}}
+   in case netSubState w of
+        NetListening _ -> pure (setErr "Already listening.")
+        NetConnecting _ _ -> pure (setErr "Connection in progress.")
+        NetInLobby -> pure (setErr "Already connected.")
+        NetInBattle -> pure (setErr "In battle.")
+        NetDisconnected ->
+          case intent of
+            MPListen port -> do
+              void $ forkIO (runListen port w)
+              pure clearErr {netSubState = NetListening (fromIntegral port)}
+            MPConnect host port -> do
+              void $ forkIO (runConnect host port w)
+              pure clearErr {netSubState = NetConnecting host (fromIntegral port)}

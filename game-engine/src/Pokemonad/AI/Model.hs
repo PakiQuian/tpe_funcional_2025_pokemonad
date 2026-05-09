@@ -16,8 +16,8 @@ import Data.Ord (comparing)
 import Pokemonad.Battle.Damage (getAttackStat, getDefenseStat, getTypeEffectiveness, resolveDamage)
 import Pokemonad.Battle.State
   ( BattleAction (..),
-    BattlePokemon (..),
     BattlePhase (..),
+    BattlePokemon (..),
     BattleState (..),
   )
 import Pokemonad.Core.Move (Move (..))
@@ -39,16 +39,16 @@ defaultQWeights =
   QWeights
     { weightsBias = 0.0,
       weightsCoefficients =
-        [ 0.15,   -- self hp ratio
-          -0.10,  -- enemy hp ratio
-          0.75,   -- expected damage ratio
-          0.55,   -- type effectiveness
-          0.25,   -- speed advantage
-          0.80,   -- estimated KO chance
-          0.45,   -- defensive switch gain
-          0.35,   -- offensive switch gain
-          0.22,   -- move action prior
-          -0.35   -- switch action prior
+        [ 0.15, -- self hp ratio
+          -0.10, -- enemy hp ratio
+          0.75, -- expected damage ratio
+          0.55, -- type effectiveness
+          0.25, -- speed advantage
+          0.80, -- estimated KO chance
+          0.45, -- defensive switch gain
+          0.35, -- offensive switch gain
+          0.22, -- move action prior
+          -0.35 -- switch action prior
         ]
     }
 
@@ -58,9 +58,9 @@ candidateActions bState =
       moveActions = [ActionMove i | i <- [0 .. moveCount - 1]]
       availableSwitches =
         [ ActionSwitch benchIdx
-          | (benchIdx, bp) <- zip [0 ..] (enemyBench bState),
-            battlePokemonStatus bp /= Fainted,
-            shouldConsiderSwitch bState benchIdx bp
+        | (benchIdx, bp) <- zip [0 ..] (enemyBench bState),
+          battlePokemonStatus bp /= Fainted,
+          shouldConsiderSwitch bState benchIdx bp
         ]
    in case phase bState of
         BattleEnded _ -> []
@@ -109,8 +109,8 @@ extractFeatures bState action =
               estimateSwitchOffensiveGain selfActive incoming opponentActive
             )
       _ -> (0.0, 0.0)
-    isMoveAction = case action of { ActionMove _ -> 1.0; _ -> 0.0 }
-    isSwitchAction = case action of { ActionSwitch _ -> 1.0; _ -> 0.0 }
+    isMoveAction = case action of ActionMove _ -> 1.0; _ -> 0.0
+    isSwitchAction = case action of ActionSwitch _ -> 1.0; _ -> 0.0
 
 qValue :: QWeights -> BattleState -> BattleAction -> Float
 qValue weights bState action =

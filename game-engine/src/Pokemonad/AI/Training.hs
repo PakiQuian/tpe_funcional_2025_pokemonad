@@ -20,8 +20,8 @@ import Pokemonad.AI.Model
   )
 import Pokemonad.Battle.State
   ( BattleAction (..),
-    BattlePokemon (..),
     BattlePhase (..),
+    BattlePokemon (..),
     BattleState (..),
     Winner (..),
     initBattle,
@@ -166,8 +166,9 @@ runSelfPlayEpisode rng params initialWeights epsilon battleState0 =
       case phase bState of
         BattleEnded winner ->
           (weightsNow, rewardAcc, winner == EnemyWon, turnAcc, rngNow)
-        _ | turnAcc >= maxTurns ->
-          (weightsNow, rewardAcc, False, turnAcc, rngNow)
+        _
+          | turnAcc >= maxTurns ->
+              (weightsNow, rewardAcc, False, turnAcc, rngNow)
         _ ->
           let mirroredState = mirrorBattleState bState
               (playerMaybeAction, rng1) = chooseActionEpsilon rngNow epsilon weightsNow mirroredState
@@ -182,7 +183,7 @@ runSelfPlayEpisode rng params initialWeights epsilon battleState0 =
 
 tdUpdate :: TrainingHyperParams -> QWeights -> BattleState -> BattleAction -> Float -> BattleState -> QWeights
 tdUpdate params weights s action reward sNext =
-  let adjustedReward = reward - (case action of { ActionSwitch _ -> switchPenalty params; _ -> 0.0 })
+  let adjustedReward = reward - (case action of ActionSwitch _ -> switchPenalty params; _ -> 0.0)
       prediction = qValue weights s action
       nextBest = bestQValue weights sNext
       delta = clampSigned (gradientClip params) (adjustedReward + discountFactor params * nextBest - prediction)

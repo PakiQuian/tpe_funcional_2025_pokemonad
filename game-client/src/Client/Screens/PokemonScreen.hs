@@ -1,9 +1,7 @@
 module Client.Screens.PokemonScreen (drawPokemonScreen) where
 
+import Client.Drawing (cursorYellowColor, drawLogo, drawTextWithShadow, panelBlueColor)
 import Data.List (intercalate)
-import Client.Drawing (drawLogo, drawTextWithShadow, pokemonBlue, pokemonYellow)
-import Pokemonad.Core.Pokemon (Pokemon (..), getPokemonById)
-import Pokemonad.Core.Types (PokemonId (..), PokemonType (..), Stats (..))
 import Graphics.Gloss
   ( Picture,
     circleSolid,
@@ -16,6 +14,8 @@ import Graphics.Gloss
     translate,
     white,
   )
+import Pokemonad.Core.Pokemon (Pokemon (..), getPokemonById)
+import Pokemonad.Core.Types (PokemonId (..), PokemonType (..), Stats (..))
 
 drawPokemonScreen :: Picture -> Picture -> PokemonId -> Maybe Picture -> Picture
 drawPokemonScreen menuBgImage logoImage selectedId maybeSprite =
@@ -31,7 +31,7 @@ drawDetailBox selectedId maybeSprite =
   translate 0 (-50) $
     pictures
       [ color white $ rectangleSolid 720 440,
-        color pokemonBlue $ rectangleSolid 700 420,
+        color panelBlueColor $ rectangleSolid 700 420,
         color white $ translate 0 0 $ rectangleSolid 2 400,
         translate (-170) 0 $ drawPokemonInfo selectedId,
         translate 170 0 $ drawPokemonDisplay maybeSprite
@@ -44,10 +44,10 @@ drawPokemonInfo selectedId =
       scale 0.2 0.2 $ color white $ text "Pokemon Not Found"
     Just p ->
       pictures
-        [ translate (-160) 150 $ scale 0.25 0.25 $ color pokemonYellow $ text (pokemonName p),
+        [ translate (-160) 150 $ scale 0.25 0.25 $ color cursorYellowColor $ text (pokemonName p),
           translate 80 150 $ scale 0.25 0.25 $ color white $ text ("#" ++ formatNumber (unPokemonId selectedId)),
           translate (-160) 110 $ scale 0.15 0.15 $ color white $ text "TYPE:",
-          translate (-90) 110 $ scale 0.15 0.15 $ color pokemonYellow $ text (showTypes (pokemonTypes p)),
+          translate (-90) 110 $ scale 0.15 0.15 $ color cursorYellowColor $ text (showTypes (pokemonTypes p)),
           translate (-160) 60 $ scale 0.12 0.12 $ color white $ text (take 35 (pokemonDescription p)),
           translate (-160) 40 $ scale 0.12 0.12 $ color white $ text (drop 35 (pokemonDescription p)),
           drawStatsTable (pokemonStats p)

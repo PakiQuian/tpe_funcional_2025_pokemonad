@@ -1,8 +1,15 @@
 module Client.Screens.MultiplayerScreen (drawMultiplayerScreen) where
 
-import Client.Drawing (drawLogo, drawTextWithShadow, pokemonBlue, pokemonYellow)
-import Client.State (GameState (..))
-import Client.Types (NetSubState (..))
+import Client.Drawing
+  ( cursorYellowColor,
+    drawLogo,
+    drawTextWithShadow,
+    footerBgColor,
+    panelBlueColor,
+    panelBorderColor,
+    subtitleBlueColor,
+  )
+import Client.Types (MultiplayerState (..), NetSubState (..))
 import Graphics.Gloss
   ( Picture,
     blank,
@@ -11,36 +18,36 @@ import Graphics.Gloss
     pictures,
     polygon,
     rectangleSolid,
+    rectangleWire,
     scale,
     text,
     translate,
     white,
-    rectangleWire,
   )
 
 -- | P2P screen aligned with Menu / TeamSelect: background, logo, panel, and typography.
-drawMultiplayerScreen :: Picture -> Picture -> GameState -> NetSubState -> Picture
-drawMultiplayerScreen menuBgImage logoImage gs netSt =
+drawMultiplayerScreen :: Picture -> Picture -> MultiplayerState -> NetSubState -> Picture
+drawMultiplayerScreen menuBgImage logoImage ms netSt =
   pictures
     [ menuBgImage,
       drawLogo logoImage,
-      translate 0 0 $ drawMainPanel gs netSt,
+      translate 0 0 $ drawMainPanel ms netSt,
       drawFooter
     ]
 
 -- Main panel (same white border + blue interior pattern as the menu).
-drawMainPanel :: GameState -> NetSubState -> Picture
-drawMainPanel gs netSt =
-  let row = multiplayerRow gs
-      hostStr = multiplayerHost gs
-      portStr = multiplayerPort gs
+drawMainPanel :: MultiplayerState -> NetSubState -> Picture
+drawMainPanel ms netSt =
+  let row = mpCursor ms
+      hostStr = mpHost ms
+      portStr = mpPort ms
       netLine = netStatusLine netSt
-      errLine = multiplayerError gs
+      errLine = mpError ms
    in pictures
         [ color white $ rectangleSolid 720 320,
-          color pokemonBlue $ rectangleSolid 700 300,
+          color panelBlueColor $ rectangleSolid 700 300,
           drawTextWithShadow "P2P MULTIPLAYER" 0.2 95 white,
-          drawTextWithShadow "TCP - Host or Client" 0.12 55 (makeColorI 200 220 255 255),
+          drawTextWithShadow "TCP - Host or Client" 0.12 55 subtitleBlueColor,
           drawFieldRow row 0 10 "HOST" hostStr,
           drawFieldRow row 1 (-30) "PORT" portStr,
           drawActionRow row 2 (-70) "LISTEN ON THIS PORT (HOST)",
@@ -67,7 +74,7 @@ drawNetStatusBox netLine maybeErr =
         Nothing -> white
    in pictures
         [ translate 0 (-220) $ color (makeColorI 0 0 0 165) $ rectangleSolid 640 44,
-          translate 0 (-220) $ color (makeColorI 170 215 255 255) $ rectangleWire 640 44,
+          translate 0 (-220) $ color panelBorderColor $ rectangleWire 640 44,
           translate (-260) (-227) $
             scale 0.11 0.11 $
               color lineColor $
@@ -84,7 +91,7 @@ clipText maxLen s
 drawFieldRow :: Int -> Int -> Float -> String -> String -> Picture
 drawFieldRow currentRow idx yBase label val =
   let sel = currentRow == idx
-      valColor = if sel then pokemonYellow else makeColorI 195 195 195 255
+      valColor = if sel then cursorYellowColor else makeColorI 195 195 195 255
       line =
         pictures
           [ translate (-260) yBase $
@@ -98,7 +105,7 @@ drawFieldRow currentRow idx yBase label val =
           ]
       cursor =
         if sel
-          then translate (-295) (yBase + 5) $ color pokemonYellow $ polygon [(0, 0), (0, 14), (11, 7)]
+          then translate (-295) (yBase + 5) $ color cursorYellowColor $ polygon [(0, 0), (0, 14), (11, 7)]
           else blank
    in pictures [cursor, line]
 
@@ -109,7 +116,7 @@ drawActionRow currentRow idx yBase label =
       txtColor = if sel then white else makeColorI 165 165 165 255
       cursor =
         if sel
-          then translate (-295) (yBase + 5) $ color pokemonYellow $ polygon [(0, 0), (0, 14), (11, 7)]
+          then translate (-295) (yBase + 5) $ color cursorYellowColor $ polygon [(0, 0), (0, 14), (11, 7)]
           else blank
       txt =
         translate (-260) yBase $
@@ -123,7 +130,7 @@ drawFooter :: Picture
 drawFooter =
   pictures
     [ translate 0 (-320) $
-        color (makeColorI 0 0 0 200) $
+        color footerBgColor $
           rectangleSolid 1280 52,
       drawTextWithShadow
         "ENTER: Confirm row  |  UP/DOWN: Move  |  ESC: Back to menu"
@@ -131,4 +138,3 @@ drawFooter =
         (-327)
         white
     ]
-
