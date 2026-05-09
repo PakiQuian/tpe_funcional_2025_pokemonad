@@ -17,7 +17,8 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Network.Socket
 import qualified Network.Socket.ByteString as NSB
-import P2P.Serialization (AppMsg, decodeAllFrames, encodeFramed)
+import P2P.Serialization (decodeAllFrames, encodeFramed)
+import P2P.Types (AppMsg)
 
 -- Lecturas pequeñas, el buffer lógico es 'buf' en 'recvLoop' (TCP es flujo continuo).
 recvChunkSize :: Int

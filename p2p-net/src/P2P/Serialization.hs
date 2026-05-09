@@ -1,12 +1,5 @@
 module P2P.Serialization
-  ( -- handshake / versión
-    protocolMagic,
-    currentProtocolVersion,
-    -- tipos de mensaje
-    Handshake (..),
-    AppMsg (..),
-    -- enmarcar y parsear streams
-    maxFramedPayloadBytes,
+  ( maxFramedPayloadBytes,
     encodeFramed,
     FrameParseResult (..),
     decodeOneFrame,
@@ -20,31 +13,12 @@ import Data.Binary.Put (putLazyByteString, putWord32be, putWord8, runPut)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.Word (Word16, Word32)
-
--- Los dos lados deben coincidir en handshake (si no, peer equivocado / protocolo distinto).
-protocolMagic :: Word32
-protocolMagic = 0x504B4D01 -- "PKM" + 0x01
-
-currentProtocolVersion :: Word16
-currentProtocolVersion = 1 -- subir si cambia el wire format de AppMsg
-
-data Handshake = Handshake
-  { handshakeMagic :: Word32,
-    handshakeVersion :: Word16
-  }
-  deriving (Eq, Show)
+import Data.Word (Word32)
+import P2P.Types (AppMsg (..), Handshake (..))
 
 instance Binary Handshake where
   put (Handshake m v) = put m >> put v
   get = Handshake <$> get <*> get
-
-data AppMsg
-  = AppMsgHandshake Handshake
-  | AppMsgTeam [Word32]
-  | AppMsgBattleReady
-  | AppMsgTurnStub Word32
-  deriving (Eq, Show)
 
 instance Binary AppMsg where
   put msg = case msg of
@@ -52,7 +26,6 @@ instance Binary AppMsg where
     AppMsgTeam ids -> putWord8 1 >> put ids
     AppMsgBattleReady -> putWord8 2
     AppMsgTurnStub n -> putWord8 3 >> put n
-
   get = do
     tag <- getWord8
     case tag of
@@ -100,7 +73,6 @@ decodeOneFrame buf
                             Left (_, _, e) -> FrameError e
                             Right (_, _, msg) -> FrameOk msg rest
 
--- Varios mensajes seguidos en el mismo buffer; el sobrante sigue en el acumulador del socket.
 decodeAllFrames :: ByteString -> Either String ([AppMsg], ByteString)
 decodeAllFrames = go []
   where

@@ -1,25 +1,24 @@
 cabal-version:      3.0
 name:               p2p-net
 version:            0.1.0.0
-synopsis:           Librería P2P para juegos por turnos
+synopsis:           Generic peer-to-peer networking library for turn-based games
 license:            BSD-3-Clause
 author:             Francisco Quian Blanco, Theo Stanfield
 build-type:         Simple
 
 library
-    -- Importante: Aquí van tus carpetas de código fuente
     hs-source-dirs:   src
-    
-    -- Aquí LISTAS los módulos (archivos .hs) que crees dentro de src/
-    -- Ejemplo: Si creas src/P2P/Socket.hs, pones P2P.Socket
-    exposed-modules:  P2P.Communication
-                      P2P.Serialization
 
-    -- Las librerías que investigaron
-    build-depends:    base >= 4.14 && < 5,
-                      network,
-                      stm,
-                      binary,
-                      bytestring
-    
+    exposed-modules:
+        P2P.Types
+        P2P.Serialization
+        P2P.Communication
+
+    build-depends:
+        base >= 4.14 && < 5,
+        network,
+        stm,
+        binary,
+        bytestring
+
     default-language: Haskell2010
