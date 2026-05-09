@@ -63,7 +63,8 @@ main = do
             netSubState = NetDisconnected,
             netSocket = Nothing,
             netConnAsync = netAsync,
-            aiTrainingAsync = aiAsync
+            aiTrainingAsync = aiAsync,
+            netIsHost = False
           }
 
   putStrLn "Starting game loop..."

@@ -10,6 +10,7 @@ executable pokemonad
     main-is:          Main.hs
     other-modules:    Client.Types,
                       Client.State,
+                      Client.NetSerializers,
                       Client.Drawing,
                       Client.Events,
                       Client.Render,
@@ -44,7 +45,9 @@ executable pokemonad
                       stm,
                       gloss,
                       gloss-juicy,
-                      text
+                      text,
+                      binary,
+                      bytestring
 
     default-language: Haskell2010
 

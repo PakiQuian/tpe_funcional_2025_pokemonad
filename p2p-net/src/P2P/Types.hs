@@ -2,10 +2,12 @@ module P2P.Types
   ( protocolMagic,
     currentProtocolVersion,
     Handshake (..),
+    PlayerAction (..),
     AppMsg (..),
   )
 where
 
+import Data.ByteString (ByteString)
 import Data.Word (Word16, Word32)
 
 protocolMagic :: Word32
@@ -20,9 +22,16 @@ data Handshake = Handshake
   }
   deriving (Eq, Show)
 
+data PlayerAction
+  = UseMove Int
+  | SwitchPokemon Int
+  deriving (Eq, Show)
+
 data AppMsg
   = AppMsgHandshake Handshake
   | AppMsgTeam [Word32]
   | AppMsgBattleReady
-  | AppMsgTurnStub Word32
+  | AppMsgAction PlayerAction
+  | AppMsgBattleState ByteString
+  | AppMsgDisconnect
   deriving (Eq, Show)

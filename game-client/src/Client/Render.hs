@@ -17,7 +17,7 @@ import Client.Types
     BattleScreenState (..),
     MenuState (..),
     MultiplayerState (..),
-    NetSubState,
+    NetSubState (..),
     OpponentSelectState (..),
     PokedexState (..),
     Screen (..),
@@ -48,7 +48,8 @@ drawGame gs netSt =
               maybeSprite = Map.lookup pid (assetPokeFront a)
            in drawPokemonScreen (assetMenuBg a) (assetLogo a) pid maybeSprite
         Multiplayer ->
-          drawMultiplayerScreen (assetMenuBg a) (assetLogo a) (multiplayerState gs) netSt
+          let inLobby = netSt == NetInLobby
+           in drawMultiplayerScreen (assetMenuBg a) (assetLogo a) (multiplayerState gs) netSt inLobby
         AISimulator ->
           drawAISimulatorScreen (assetMenuBg a) (assetLogo a) (aiSimState gs)
         TeamSelect ->

@@ -22,7 +22,7 @@ import qualified Data.Map as Map
 import Graphics.Gloss (Picture)
 import Network.Socket (HostName, PortNumber, Socket)
 import Pokemonad.AI.Model (QWeights)
-import Pokemonad.Battle.State (BattleState)
+import Pokemonad.Battle.State (BattleAction, BattleState)
 import Pokemonad.Core.Types (PokemonId (..), TrainerId (..))
 import System.Random (StdGen)
 
@@ -70,7 +70,7 @@ data NetSubState
   deriving (Eq, Show)
 
 data NetConnAsync
-  = NetConnOk Socket NetSubState
+  = NetConnOk Socket NetSubState Bool
   | NetConnErr String
   deriving (Eq, Show)
 
@@ -103,7 +103,9 @@ data MultiplayerState = MultiplayerState
     mpHost :: String,
     mpPort :: String,
     mpPending :: Maybe MultiplayerIntent,
-    mpError :: Maybe String
+    mpError :: Maybe String,
+    mpTeamSent :: Bool,
+    mpOpponentTeam :: Maybe [PokemonId]
   }
 
 data BattleScreenState = BattleScreenState
@@ -112,7 +114,10 @@ data BattleScreenState = BattleScreenState
     battleBenchCursor :: Int,
     battleMenuType :: BattleMenuType,
     currentBattle :: Maybe BattleState,
-    battleBgIndex :: Int
+    battleBgIndex :: Int,
+    battleIsMultiplayer :: Bool,
+    battlePendingLocalAction :: Maybe BattleAction,
+    battlePendingRemoteAction :: Maybe BattleAction
   }
 
 data AISimulatorState = AISimulatorState
@@ -130,7 +135,10 @@ defaultBattleScreenState =
       battleBenchCursor = 0,
       battleMenuType = MainBattleMenu,
       currentBattle = Nothing,
-      battleBgIndex = 0
+      battleBgIndex = 0,
+      battleIsMultiplayer = False,
+      battlePendingLocalAction = Nothing,
+      battlePendingRemoteAction = Nothing
     }
 
 defaultMultiplayerState :: MultiplayerState
@@ -140,5 +148,7 @@ defaultMultiplayerState =
       mpHost = "127.0.0.1",
       mpPort = "7878",
       mpPending = Nothing,
-      mpError = Nothing
+      mpError = Nothing,
+      mpTeamSent = False,
+      mpOpponentTeam = Nothing
     }

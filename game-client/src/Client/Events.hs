@@ -19,22 +19,31 @@ import Client.State
     World (..),
     disconnectNetWorld,
     drainNetInbox,
+    mergeMultiplayerBattle,
+    mergeMultiplayerLobby,
     mergeNetAsync,
   )
 import Client.Types
   ( Assets (..),
     BattleScreenState (..),
     MultiplayerState (..),
+    NetSubState (..),
     OpponentSelectState (..),
     Screen (..),
     defaultBattleScreenState,
   )
+import Data.Maybe (isJust)
+import Data.Word (Word32)
 import Graphics.Gloss.Interface.Pure.Game
   ( Event (EventKey),
     Key (Char, SpecialKey),
     KeyState (Down, Up),
     SpecialKey (KeyBackspace, KeyDelete, KeyDown, KeyEnter, KeyEsc, KeyLeft, KeyRight, KeyUp),
   )
+import P2P.Communication (sendMsg)
+import P2P.Types (AppMsg (..), PlayerAction (..))
+import Pokemonad.Battle.State (BattleAction (..))
+import Pokemonad.Core.Types (PokemonId (..))
 
 -- ---------------------------------------------------------------------------
 -- World-level IO entry points
@@ -45,22 +54,77 @@ handleWorldInput ev w = do
   let g0 = worldGame w
   w1 <- AISimulatorHandler.launchAITrainingIfRequested ev w
   let g1 = handleGameInput ev (worldGame w1)
-      leftMP = currentScreen g0 == Multiplayer && currentScreen g1 /= Multiplayer
+      leftMP =
+        currentScreen g0 == Multiplayer
+          && currentScreen g1 /= Multiplayer
+          && currentScreen g1 /= TeamSelect
   w2 <- if leftMP then disconnectNetWorld w1 else pure w1
-  let w3 = w2 {worldGame = g1}
-      mp = multiplayerState g1
+
+  -- Intercept TeamSelect → OpponentSelect when in multiplayer lobby
+  let teamJustConfirmed =
+        currentScreen g0 == TeamSelect
+          && currentScreen g1 == OpponentSelect
+          && netSubState w == NetInLobby
+  w3 <-
+    if teamJustConfirmed
+      then sendTeamAndWait (playerTeam g1) (w2 {worldGame = g1})
+      else pure (w2 {worldGame = g1})
+
+  -- Send pending local action to host when client just committed an action
+  let bss0 = battleScreenState g0
+      bss3 = battleScreenState (worldGame w3)
+      actionJustSet =
+        battlePendingLocalAction bss3 /= battlePendingLocalAction bss0
+          && isJust (battlePendingLocalAction bss3)
+  w4 <-
+    if actionJustSet && not (netIsHost w3) && netSubState w3 == NetInBattle
+      then sendPendingAction w3
+      else pure w3
+
+  -- Process pending connection intent
+  let g4 = worldGame w4
+      mp = multiplayerState g4
   case mpPending mp of
-    Nothing -> pure w3
+    Nothing -> pure w4
     Just intent ->
-      let g2 = g1 {multiplayerState = mp {mpPending = Nothing}}
-       in MultiplayerHandler.startMultiplayerNet intent (w3 {worldGame = g2})
+      let g5 = g4 {multiplayerState = mp {mpPending = Nothing}}
+       in MultiplayerHandler.startMultiplayerNet intent (w4 {worldGame = g5})
 
 handleWorldTick :: Float -> World -> IO World
 handleWorldTick dt w = do
   wMerged <- mergeNetAsync w
   wDrained <- drainNetInbox wMerged
-  wAI <- AISimulatorHandler.mergeAITraining wDrained
+  wLobby <- mergeMultiplayerLobby wDrained
+  wBattle <- mergeMultiplayerBattle wLobby
+  wAI <- AISimulatorHandler.mergeAITraining wBattle
   pure wAI {worldGame = handleTick dt (worldGame wAI)}
+
+-- ---------------------------------------------------------------------------
+-- Multiplayer IO helpers
+-- ---------------------------------------------------------------------------
+
+sendTeamAndWait :: [PokemonId] -> World -> IO World
+sendTeamAndWait teamIds w = do
+  let ids = map (fromIntegral . unPokemonId) teamIds :: [Word32]
+      ms = multiplayerState (worldGame w)
+      newMs = ms {mpTeamSent = True}
+      newGs = (worldGame w) {currentScreen = Multiplayer, multiplayerState = newMs}
+  case netSocket w of
+    Just sock -> sendMsg sock (AppMsgTeam ids)
+    Nothing -> pure ()
+  pure w {worldGame = newGs}
+
+sendPendingAction :: World -> IO World
+sendPendingAction w = do
+  let bss = battleScreenState (worldGame w)
+  case (netSocket w, battlePendingLocalAction bss) of
+    (Just sock, Just action) -> sendMsg sock (AppMsgAction (toPlayerAction action))
+    _ -> pure ()
+  pure w
+
+toPlayerAction :: BattleAction -> PlayerAction
+toPlayerAction (ActionMove idx) = UseMove idx
+toPlayerAction (ActionSwitch idx) = SwitchPokemon idx
 
 -- ---------------------------------------------------------------------------
 -- Pure game input handler
@@ -125,7 +189,7 @@ dispatchUp gs = case currentScreen gs of
 dispatchDown :: AppState -> AppState
 dispatchDown gs = case currentScreen gs of
   Menu -> gs {menuState = MenuHandler.handleDown (menuState gs)}
-  Multiplayer -> gs {multiplayerState = (multiplayerState gs) {mpCursor = min 3 (mpCursor (multiplayerState gs) + 1)}}
+  Multiplayer -> gs {multiplayerState = (multiplayerState gs) {mpCursor = min 4 (mpCursor (multiplayerState gs) + 1)}}
   Pokedex -> gs {pokedexState = PokedexHandler.handleDown (pokedexState gs)}
   TeamSelect -> gs {teamSelectState = TeamSelectHandler.handleDown (teamSelectState gs)}
   OpponentSelect -> gs {opponentState = OpponentSelectHandler.handleDown (opponentState gs)}
@@ -167,11 +231,14 @@ dispatchEnter gs = case currentScreen gs of
           trans
           (gs {opponentState = os', selectedTrainer = Just trainer, battleScreenState = bss', randomGen = rng'})
   Multiplayer ->
-    gs {multiplayerState = MultiplayerHandler.handleEnter (multiplayerState gs)}
-  AISimulator -> gs -- AI enter is IO-only (launchAITrainingIfRequested)
+    let (ms', trans) = MultiplayerHandler.handleEnter (multiplayerState gs)
+     in applyTransition trans (gs {multiplayerState = ms'})
+  AISimulator -> gs
   BattleScreen ->
-    let (bss', rng', trans) =
-          BattleHandler.handleEnter (battleScreenState gs) (enemyAIWeights gs) (randomGen gs)
+    let bss = battleScreenState gs
+        isMP = battleIsMultiplayer bss
+        (bss', rng', trans) =
+          BattleHandler.handleEnter isMP bss (enemyAIWeights gs) (randomGen gs)
      in applyTransition trans (gs {battleScreenState = bss', randomGen = rng'})
   BattleResultScreen ->
     let (trainer', team', trans) = BattleResultHandler.handleEnter

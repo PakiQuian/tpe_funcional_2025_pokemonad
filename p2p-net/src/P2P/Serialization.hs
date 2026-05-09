@@ -14,25 +14,39 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Word (Word32)
-import P2P.Types (AppMsg (..), Handshake (..))
+import P2P.Types (AppMsg (..), Handshake (..), PlayerAction (..))
 
 instance Binary Handshake where
   put (Handshake m v) = put m >> put v
   get = Handshake <$> get <*> get
+
+instance Binary PlayerAction where
+  put (UseMove idx) = putWord8 0 >> put idx
+  put (SwitchPokemon idx) = putWord8 1 >> put idx
+  get = do
+    tag <- getWord8
+    case tag of
+      0 -> UseMove <$> get
+      1 -> SwitchPokemon <$> get
+      _ -> fail "P2P.Serialization: unknown PlayerAction tag"
 
 instance Binary AppMsg where
   put msg = case msg of
     AppMsgHandshake h -> putWord8 0 >> put h
     AppMsgTeam ids -> putWord8 1 >> put ids
     AppMsgBattleReady -> putWord8 2
-    AppMsgTurnStub n -> putWord8 3 >> put n
+    AppMsgAction action -> putWord8 3 >> put action
+    AppMsgBattleState bs -> putWord8 4 >> put bs
+    AppMsgDisconnect -> putWord8 5
   get = do
     tag <- getWord8
     case tag of
       0 -> AppMsgHandshake <$> get
       1 -> AppMsgTeam <$> get
       2 -> pure AppMsgBattleReady
-      3 -> AppMsgTurnStub <$> get
+      3 -> AppMsgAction <$> get
+      4 -> AppMsgBattleState <$> get
+      5 -> pure AppMsgDisconnect
       _ -> fail "P2P.Serialization: unknown AppMsg tag"
 
 maxFramedPayloadBytes :: Int

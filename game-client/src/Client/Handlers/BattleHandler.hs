@@ -6,6 +6,7 @@ module Client.Handlers.BattleHandler
     handleEnter,
     handleBack,
     isForcedSwitchPhase,
+    isForcedEnemySwitchPhase,
     firstSwitchableBenchIndex,
     firstSwitchableBenchIndexFromBattle,
     nextSwitchableBenchIndex,
@@ -91,17 +92,18 @@ handleRight s =
       _ -> s
 
 -- ---------------------------------------------------------------------------
--- Enter handler — returns (newState, newRng, maybeTransition)
+-- Enter handler
 -- ---------------------------------------------------------------------------
 
 handleEnter ::
+  Bool ->
   BattleScreenState ->
   Maybe QWeights ->
   StdGen ->
   (BattleScreenState, StdGen, Maybe Screen)
-handleEnter s weights gen =
-  if isForcedSwitchPhase s
-    then case battleMenuType s of
+handleEnter isMP s weights gen
+  | isForcedEnemySwitchPhase s = (s, gen, Nothing)
+  | isForcedSwitchPhase s = case battleMenuType s of
       PokemonMenu ->
         case currentBattle s of
           Just bState ->
@@ -111,7 +113,10 @@ handleEnter s weights gen =
           Nothing -> (s, gen, Nothing)
       SwitchConfirmMenu ->
         case battleMoveCursor s of
-          0 -> submitSelectedSwitch s weights gen
+          0 ->
+            if isMP
+              then storeLocalAction s gen (ActionSwitch (battleBenchCursor s))
+              else submitSelectedSwitch s weights gen
           1 -> (s {battleMenuType = PokemonMenu}, gen, Nothing)
           _ -> (s, gen, Nothing)
       _ ->
@@ -123,7 +128,7 @@ handleEnter s weights gen =
           gen,
           Nothing
         )
-    else case battleMenuType s of
+  | otherwise = case battleMenuType s of
       MainBattleMenu ->
         case battleMainCursor s of
           0 -> (s {battleMenuType = FightMenu, battleMoveCursor = 0}, gen, Nothing)
@@ -131,7 +136,9 @@ handleEnter s weights gen =
           3 -> (s {battleMenuType = QuitConfirmMenu, battleMoveCursor = 1}, gen, Nothing)
           _ -> (s, gen, Nothing)
       FightMenu ->
-        submitSelectedMove s weights gen
+        if isMP
+          then storeLocalAction s gen (ActionMove (battleMoveCursor s))
+          else submitSelectedMove s weights gen
       BagMenu -> (s, gen, Nothing)
       PokemonMenu ->
         case currentBattle s of
@@ -142,7 +149,10 @@ handleEnter s weights gen =
           Nothing -> (s, gen, Nothing)
       SwitchConfirmMenu ->
         case battleMoveCursor s of
-          0 -> submitSelectedSwitch s weights gen
+          0 ->
+            if isMP
+              then storeLocalAction s gen (ActionSwitch (battleBenchCursor s))
+              else submitSelectedSwitch s weights gen
           1 -> (s {battleMenuType = PokemonMenu}, gen, Nothing)
           _ -> (s, gen, Nothing)
       QuitConfirmMenu ->
@@ -150,6 +160,22 @@ handleEnter s weights gen =
           0 -> (defaultBattleScreenState, gen, Just Menu)
           1 -> (s {battleMenuType = MainBattleMenu}, gen, Nothing)
           _ -> (s, gen, Nothing)
+
+-- Store a local action and switch to waiting state (multiplayer).
+storeLocalAction ::
+  BattleScreenState ->
+  StdGen ->
+  BattleAction ->
+  (BattleScreenState, StdGen, Maybe Screen)
+storeLocalAction s gen action =
+  ( s
+      { battlePendingLocalAction = Just action,
+        battleMenuType = MainBattleMenu,
+        battleMoveCursor = 0
+      },
+    gen,
+    Nothing
+  )
 
 -- ---------------------------------------------------------------------------
 -- Back handler
@@ -170,7 +196,7 @@ handleBack s =
       _ -> s
 
 -- ---------------------------------------------------------------------------
--- Move / switch submission
+-- Move / switch submission (single-player)
 -- ---------------------------------------------------------------------------
 
 submitSelectedMove ::
@@ -233,6 +259,12 @@ isForcedSwitchPhase :: BattleScreenState -> Bool
 isForcedSwitchPhase s =
   case currentBattle s of
     Just bState -> phase bState == WaitingForForcedPlayerSwitch
+    Nothing -> False
+
+isForcedEnemySwitchPhase :: BattleScreenState -> Bool
+isForcedEnemySwitchPhase s =
+  case currentBattle s of
+    Just bState -> phase bState == WaitingForForcedEnemySwitch
     Nothing -> False
 
 nextBattleMenuType :: BattleState -> BattleMenuType

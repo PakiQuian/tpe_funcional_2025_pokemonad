@@ -10,13 +10,15 @@ module Pokemonad.Battle.State
     getBench,
     setBench,
     initBattle,
+    initBattleFromTeams,
     makeBattlePokemon,
+    flipBattleState,
   )
 where
 
 import Pokemonad.Core.Move (Move)
 import Pokemonad.Core.Pokemon (Pokemon (..), getPokemonById)
-import Pokemonad.Core.Trainer (AIDifficulty, Trainer (..))
+import Pokemonad.Core.Trainer (AIDifficulty (..), Trainer (..))
 import Pokemonad.Core.Types (HP (..), Level (..), PokemonId (..), Stats (..), Status (..))
 
 data BattlePokemon = BattlePokemon
@@ -33,6 +35,7 @@ data BattlePhase
   = WaitingForCommand
   | TurnExecution
   | WaitingForForcedPlayerSwitch
+  | WaitingForForcedEnemySwitch
   | BattleEnded Winner
   deriving (Show, Eq)
 
@@ -107,6 +110,36 @@ makeBattlePokemon pid =
               battlePokemonLevel = lvl
             }
     Nothing -> makeBattlePokemon (PokemonId 25)
+
+initBattleFromTeams :: [PokemonId] -> [PokemonId] -> BattleState
+initBattleFromTeams hostTeamIds clientTeamIds =
+  let pTeam = map makeBattlePokemon hostTeamIds
+      eTeam = map makeBattlePokemon clientTeamIds
+   in BattleState
+        { playerActive = head pTeam,
+          playerBench = tail pTeam,
+          enemyActive = head eTeam,
+          enemyBench = tail eTeam,
+          enemyDifficulty = DifficultyEasy,
+          turnCount = 1,
+          phase = WaitingForCommand,
+          battleLog = ["P2P Battle started!"]
+        }
+
+flipBattleState :: BattleState -> BattleState
+flipBattleState bs =
+  bs
+    { playerActive = enemyActive bs,
+      playerBench = enemyBench bs,
+      enemyActive = playerActive bs,
+      enemyBench = playerBench bs,
+      phase = flipPhase (phase bs)
+    }
+
+flipPhase :: BattlePhase -> BattlePhase
+flipPhase WaitingForForcedPlayerSwitch = WaitingForForcedEnemySwitch
+flipPhase WaitingForForcedEnemySwitch = WaitingForForcedPlayerSwitch
+flipPhase p = p
 
 calculateBaseHp :: Int -> Level -> Int
 calculateBaseHp baseStat (Level level) =

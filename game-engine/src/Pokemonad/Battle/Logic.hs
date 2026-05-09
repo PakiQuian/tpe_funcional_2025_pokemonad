@@ -4,6 +4,7 @@ module Pokemonad.Battle.Logic
     switchActive,
     updatePokemonAfterDamage,
     resolveTurnAfterDamage,
+    resolveTurnAfterDamageMulti,
   )
 where
 
@@ -66,6 +67,18 @@ continuePlayerCheck bState logs
         Nothing -> (bState {phase = BattleEnded EnemyWon}, logs ++ ["You have no Pokemon left!"])
   | phase bState == BattleEnded PlayerWon = (bState, logs)
   | otherwise = (bState {phase = WaitingForCommand}, logs)
+
+resolveTurnAfterDamageMulti :: BattleState -> (BattleState, [String])
+resolveTurnAfterDamageMulti bState
+  | unHP (battlePokemonHp (enemyActive bState)) <= 0 =
+      case firstAliveIndex (enemyBench bState) of
+        Just _ ->
+          continuePlayerCheck
+            (bState {phase = WaitingForForcedEnemySwitch})
+            ["Opponent's Pokemon fainted! Waiting for opponent to switch..."]
+        Nothing ->
+          (bState {phase = BattleEnded PlayerWon}, ["Opponent has no Pokemon left!"])
+  | otherwise = continuePlayerCheck bState []
 
 pickBenchPokemon :: Int -> [BattlePokemon] -> Maybe (BattlePokemon, [BattlePokemon])
 pickBenchPokemon idx bench

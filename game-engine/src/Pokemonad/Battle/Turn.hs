@@ -1,5 +1,6 @@
 module Pokemonad.Battle.Turn
   ( executeTurn,
+    executeTurnMulti,
     applyAction,
     submitPlayerActionWithEnemyWeights,
   )
@@ -7,7 +8,7 @@ where
 
 import Pokemonad.AI.Decision (QWeights, chooseEnemyActionWithMaybeWeights)
 import Pokemonad.Battle.Damage (canAttack, doesMoveHit, getAttackStat, getDefenseStat, resolveDamage)
-import Pokemonad.Battle.Logic (isAvailableForSwitch, resolveTurnAfterDamage, switchActive, updatePokemonAfterDamage)
+import Pokemonad.Battle.Logic (isAvailableForSwitch, resolveTurnAfterDamage, resolveTurnAfterDamageMulti, switchActive, updatePokemonAfterDamage)
 import Pokemonad.Battle.State
   ( BattleAction (..),
     BattlePhase (..),
@@ -18,6 +19,8 @@ import Pokemonad.Battle.State
     getActive,
     getBench,
     setActive,
+    playerActive,
+    enemyActive,
   )
 import Pokemonad.Core.Move (Move (..))
 import Pokemonad.Core.Pokemon (Pokemon (..))
@@ -114,6 +117,73 @@ executeTurn rng bState playerAction enemyAction =
                         else applyAction secondSide r1 s1 secondAction
                  in (s2, l1, l2, r2)
           (resolved, postLogs) = resolveTurnAfterDamage afterActions
+          finalState =
+            resolved
+              { turnCount = turnCount bState + 1,
+                battleLog = battleLog resolved ++ logsFirst ++ logsSecond ++ postLogs
+              }
+       in (finalState, rngFinal)
+
+executeTurnMulti :: StdGen -> BattleState -> BattleAction -> BattleAction -> (BattleState, StdGen)
+executeTurnMulti rng bState playerAction enemyAction =
+  case phase bState of
+    BattleEnded _ -> (bState, rng)
+    WaitingForForcedPlayerSwitch ->
+      case playerAction of
+        ActionSwitch _ ->
+          let (switched, switchLogs, rng1) = applyAction PlayerSide rng bState playerAction
+              keepForced = unHP (battlePokemonHp (playerActive switched)) <= 0
+              phaseAfter = if keepForced then WaitingForForcedPlayerSwitch else WaitingForCommand
+           in (switched {phase = phaseAfter, battleLog = battleLog switched ++ switchLogs}, rng1)
+        _ ->
+          (bState {battleLog = battleLog bState ++ ["You must switch Pokemon before continuing."]}, rng)
+    WaitingForForcedEnemySwitch ->
+      case enemyAction of
+        ActionSwitch _ ->
+          let (switched, switchLogs, rng1) = applyAction EnemySide rng bState enemyAction
+              keepForced = unHP (battlePokemonHp (enemyActive switched)) <= 0
+              phaseAfter = if keepForced then WaitingForForcedEnemySwitch else WaitingForCommand
+           in (switched {phase = phaseAfter, battleLog = battleLog switched ++ switchLogs}, rng1)
+        _ ->
+          (bState {battleLog = battleLog bState ++ ["Waiting for opponent to switch."]}, rng)
+    _ ->
+      let playerDidSwitch = isSwitchAction playerAction
+          enemyDidSwitch = isSwitchAction enemyAction
+          (afterActions, logsFirst, logsSecond, rngFinal)
+            | playerDidSwitch && enemyDidSwitch =
+                let (s1, l1, r1) = applyAction PlayerSide rng bState playerAction
+                    (s2, l2, r2) = applyAction EnemySide r1 s1 enemyAction
+                 in (s2, l1, l2, r2)
+            | playerDidSwitch =
+                let (s1, l1, r1) = applyAction PlayerSide rng bState playerAction
+                    (s2, l2, r2) =
+                      if unHP (battlePokemonHp (enemyActive s1)) <= 0
+                        then (s1, [], r1)
+                        else applyAction EnemySide r1 s1 enemyAction
+                 in (s2, l1, l2, r2)
+            | enemyDidSwitch =
+                let (s1, l1, r1) = applyAction EnemySide rng bState enemyAction
+                    (s2, l2, r2) =
+                      if unHP (battlePokemonHp (playerActive s1)) <= 0
+                        then (s1, [], r1)
+                        else applyAction PlayerSide r1 s1 playerAction
+                 in (s2, l1, l2, r2)
+            | otherwise =
+                let playerFirst =
+                      statsSpeed (pokemonStats (battlePokemonBase (playerActive bState)))
+                        > statsSpeed (pokemonStats (battlePokemonBase (enemyActive bState)))
+                    (firstSide, firstAction, secondSide, secondAction) =
+                      if playerFirst
+                        then (PlayerSide, playerAction, EnemySide, enemyAction)
+                        else (EnemySide, enemyAction, PlayerSide, playerAction)
+                    (s1, l1, r1) = applyAction firstSide rng bState firstAction
+                    defenderFainted = unHP (battlePokemonHp (getActive secondSide s1)) <= 0
+                    (s2, l2, r2) =
+                      if defenderFainted
+                        then (s1, [], r1)
+                        else applyAction secondSide r1 s1 secondAction
+                 in (s2, l1, l2, r2)
+          (resolved, postLogs) = resolveTurnAfterDamageMulti afterActions
           finalState =
             resolved
               { turnCount = turnCount bState + 1,

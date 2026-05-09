@@ -18,7 +18,7 @@ import qualified Data.ByteString as B
 import Network.Socket
 import qualified Network.Socket.ByteString as NSB
 import P2P.Serialization (decodeAllFrames, encodeFramed)
-import P2P.Types (AppMsg)
+import P2P.Types (AppMsg (..))
 
 -- Lecturas pequeñas, el buffer lógico es 'buf' en 'recvLoop' (TCP es flujo continuo).
 recvChunkSize :: Int
@@ -68,10 +68,11 @@ connectTo host port =
 sendMsg :: Socket -> AppMsg -> IO ()
 sendMsg sock msg = NSB.sendAll sock (encodeFramed msg)
 
--- 'catch': si 'recvLoop' lanza (p. ej. frame inválido), igual cerramos el socket aquí al salir del hilo.
 forkRecvLoop :: Socket -> TQueue AppMsg -> IO ThreadId
 forkRecvLoop sock q =
-  forkIO $ recvLoop sock q `catch` ignoreRecvExceptions
+  forkIO $ do
+    recvLoop sock q `catch` ignoreRecvExceptions
+    atomically $ writeTQueue q AppMsgDisconnect
   where
     ignoreRecvExceptions :: SomeException -> IO ()
     ignoreRecvExceptions _ = close sock

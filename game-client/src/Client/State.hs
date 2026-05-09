@@ -5,10 +5,13 @@ module Client.State
     drainNetInbox,
     applyNetMsg,
     mergeNetAsync,
+    mergeMultiplayerLobby,
+    mergeMultiplayerBattle,
     disconnectNetWorld,
   )
 where
 
+import Client.NetSerializers ()
 import Client.Types
   ( AISimulatorState (..),
     AITrainingResult (..),
@@ -30,12 +33,23 @@ import Client.Types
 import Control.Concurrent.STM (STM, atomically, readTVar, writeTVar)
 import Control.Concurrent.STM.TQueue (TQueue, tryReadTQueue)
 import Control.Concurrent.STM.TVar (TVar)
+import Data.Binary (decode, encode)
 import Data.List (foldl')
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as Map
 import Graphics.Gloss (Picture)
 import Network.Socket (Socket, close)
-import P2P.Types (AppMsg (..))
+import P2P.Communication (sendMsg)
+import P2P.Types (AppMsg (..), PlayerAction (..))
 import Pokemonad.AI.Model (QWeights)
+import Pokemonad.Battle.State
+  ( BattleAction (..),
+    BattlePhase (..),
+    BattleState (..),
+    flipBattleState,
+    initBattleFromTeams,
+  )
+import Pokemonad.Battle.Turn (executeTurnMulti)
 import Pokemonad.Core.Trainer (Trainer)
 import Pokemonad.Core.Types (PokemonId (..), TrainerId (..))
 import System.Random (StdGen)
@@ -65,7 +79,8 @@ data World = World
     netSubState :: NetSubState,
     netSocket :: Maybe Socket,
     netConnAsync :: TVar (Maybe NetConnAsync),
-    aiTrainingAsync :: TVar (Maybe AITrainingResult)
+    aiTrainingAsync :: TVar (Maybe AITrainingResult),
+    netIsHost :: Bool
   }
 
 initialState ::
@@ -139,10 +154,46 @@ applyNetMsgToWorld w msg =
     }
 
 applyNetMsg :: AppMsg -> AppState -> AppState
+applyNetMsg (AppMsgTeam ids) gs =
+  let pids = map (PokemonId . fromIntegral) ids
+      ms = multiplayerState gs
+   in gs {multiplayerState = ms {mpOpponentTeam = Just pids}}
+applyNetMsg (AppMsgAction action) gs =
+  let bss = battleScreenState gs
+      ba = case action of
+        UseMove idx -> ActionMove idx
+        SwitchPokemon idx -> ActionSwitch idx
+   in gs {battleScreenState = bss {battlePendingRemoteAction = Just ba}}
+applyNetMsg (AppMsgBattleState bs) gs =
+  let battleSt = decode (BL.fromStrict bs) :: BattleState
+      menuType = case phase battleSt of
+        WaitingForForcedPlayerSwitch -> PokemonMenu
+        _ -> MainBattleMenu
+      bss =
+        (battleScreenState gs)
+          { currentBattle = Just battleSt,
+            battleIsMultiplayer = True,
+            battleMenuType = menuType,
+            battlePendingLocalAction = Nothing,
+            battlePendingRemoteAction = Nothing
+          }
+   in gs {currentScreen = BattleScreen, battleScreenState = bss}
+applyNetMsg AppMsgDisconnect gs =
+  let ms = multiplayerState gs
+   in gs
+        { currentScreen = Multiplayer,
+          battleScreenState = defaultBattleScreenState,
+          multiplayerState =
+            defaultMultiplayerState
+              { mpError = Just "Opponent disconnected."
+              }
+        }
 applyNetMsg _ gs = gs
 
 netSubStateAfterMsg :: NetSubState -> AppMsg -> NetSubState
 netSubStateAfterMsg NetInLobby AppMsgBattleReady = NetInBattle
+netSubStateAfterMsg NetInLobby (AppMsgBattleState _) = NetInBattle
+netSubStateAfterMsg _ AppMsgDisconnect = NetDisconnected
 netSubStateAfterMsg s _ = s
 
 mergeNetAsync :: World -> IO World
@@ -162,7 +213,7 @@ mergeNetAsync w = do
                 { multiplayerState = (multiplayerState (worldGame w)) {mpError = Just err}
                 }
           }
-    Just (NetConnOk sock st) ->
+    Just (NetConnOk sock st isHost) ->
       if currentScreen (worldGame w) /= Multiplayer
         then do
           close sock
@@ -172,16 +223,112 @@ mergeNetAsync w = do
             w
               { netSocket = Just sock,
                 netSubState = st,
+                netIsHost = isHost,
                 worldGame =
                   (worldGame w)
                     { multiplayerState = (multiplayerState (worldGame w)) {mpError = Nothing}
                     }
               }
 
+mergeMultiplayerLobby :: World -> IO World
+mergeMultiplayerLobby w
+  | not (netIsHost w) = pure w
+  | netSubState w /= NetInLobby = pure w
+  | otherwise =
+      let gs = worldGame w
+          ms = multiplayerState gs
+       in case (mpTeamSent ms, mpOpponentTeam ms) of
+            (True, Just oppTeamIds) -> do
+              let myTeamIds = playerTeam gs
+                  battleSt = initBattleFromTeams myTeamIds oppTeamIds
+                  flipped = flipBattleState battleSt
+                  encoded = BL.toStrict (encode flipped)
+              case netSocket w of
+                Just sock -> sendMsg sock (AppMsgBattleState encoded)
+                Nothing -> pure ()
+              let bss =
+                    defaultBattleScreenState
+                      { currentBattle = Just battleSt,
+                        battleIsMultiplayer = True,
+                        battleMenuType = MainBattleMenu
+                      }
+                  newMs = ms {mpTeamSent = False, mpOpponentTeam = Nothing}
+                  newGs =
+                    gs
+                      { currentScreen = BattleScreen,
+                        battleScreenState = bss,
+                        multiplayerState = newMs
+                      }
+              pure w {netSubState = NetInBattle, worldGame = newGs}
+            _ -> pure w
+
+mergeMultiplayerBattle :: World -> IO World
+mergeMultiplayerBattle w
+  | not (netIsHost w) = pure w
+  | netSubState w /= NetInBattle = pure w
+  | otherwise =
+      let gs = worldGame w
+          bss = battleScreenState gs
+       in case currentBattle bss of
+            Nothing -> pure w
+            Just battleSt ->
+              case phase battleSt of
+                WaitingForForcedEnemySwitch ->
+                  case battlePendingRemoteAction bss of
+                    Just remoteAction -> executeMPTurn w gs bss battleSt (ActionMove 0) remoteAction
+                    Nothing -> pure w
+                WaitingForForcedPlayerSwitch ->
+                  case battlePendingLocalAction bss of
+                    Just localAction -> executeMPTurn w gs bss battleSt localAction (ActionMove 0)
+                    Nothing -> pure w
+                WaitingForCommand ->
+                  case (battlePendingLocalAction bss, battlePendingRemoteAction bss) of
+                    (Just localAction, Just remoteAction) ->
+                      executeMPTurn w gs bss battleSt localAction remoteAction
+                    _ -> pure w
+                _ -> pure w
+
+executeMPTurn ::
+  World ->
+  AppState ->
+  BattleScreenState ->
+  BattleState ->
+  BattleAction ->
+  BattleAction ->
+  IO World
+executeMPTurn w gs bss battleSt localAction remoteAction = do
+  let rng = randomGen gs
+      (newBattle, newRng) = executeTurnMulti rng battleSt localAction remoteAction
+      flipped = flipBattleState newBattle
+      encoded = BL.toStrict (encode flipped)
+  case netSocket w of
+    Just sock -> sendMsg sock (AppMsgBattleState encoded)
+    Nothing -> pure ()
+  let nextMenuType = case phase newBattle of
+        WaitingForForcedPlayerSwitch -> PokemonMenu
+        _ -> MainBattleMenu
+      newBss =
+        bss
+          { currentBattle = Just newBattle,
+            battleMenuType = nextMenuType,
+            battlePendingLocalAction = Nothing,
+            battlePendingRemoteAction = Nothing
+          }
+      nextScreen = case phase newBattle of
+        BattleEnded _ -> BattleResultScreen
+        _ -> BattleScreen
+      newGs =
+        gs
+          { battleScreenState = newBss,
+            randomGen = newRng,
+            currentScreen = nextScreen
+          }
+  pure w {worldGame = newGs}
+
 disconnectNetWorld :: World -> IO World
 disconnectNetWorld w =
   case netSocket w of
     Just sock -> do
       close sock
-      pure w {netSocket = Nothing, netSubState = NetDisconnected}
-    Nothing -> pure w {netSubState = NetDisconnected}
+      pure w {netSocket = Nothing, netSubState = NetDisconnected, netIsHost = False}
+    Nothing -> pure w {netSubState = NetDisconnected, netIsHost = False}

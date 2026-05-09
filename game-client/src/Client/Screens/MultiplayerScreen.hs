@@ -26,26 +26,30 @@ import Graphics.Gloss
   )
 
 -- | P2P screen aligned with Menu / TeamSelect: background, logo, panel, and typography.
-drawMultiplayerScreen :: Picture -> Picture -> MultiplayerState -> NetSubState -> Picture
-drawMultiplayerScreen menuBgImage logoImage ms netSt =
+drawMultiplayerScreen :: Picture -> Picture -> MultiplayerState -> NetSubState -> Bool -> Picture
+drawMultiplayerScreen menuBgImage logoImage ms netSt inLobby =
   pictures
     [ menuBgImage,
       drawLogo logoImage,
-      translate 0 0 $ drawMainPanel ms netSt,
+      translate 0 0 $ drawMainPanel ms netSt inLobby,
       drawFooter
     ]
 
 -- Main panel (same white border + blue interior pattern as the menu).
-drawMainPanel :: MultiplayerState -> NetSubState -> Picture
-drawMainPanel ms netSt =
+drawMainPanel :: MultiplayerState -> NetSubState -> Bool -> Picture
+drawMainPanel ms netSt inLobby =
   let row = mpCursor ms
       hostStr = mpHost ms
       portStr = mpPort ms
       netLine = netStatusLine netSt
       errLine = mpError ms
-   in pictures
-        [ color white $ rectangleSolid 720 320,
-          color panelBlueColor $ rectangleSolid 700 300,
+      lobbyRow =
+        if inLobby
+          then [drawActionRow row 4 (-150) "PROCEED TO TEAM SELECT"]
+          else []
+   in pictures $
+        [ color white $ rectangleSolid 720 (if inLobby then 360 else 320),
+          color panelBlueColor $ rectangleSolid 700 (if inLobby then 340 else 300),
           drawTextWithShadow "P2P MULTIPLAYER" 0.2 95 white,
           drawTextWithShadow "TCP - Host or Client" 0.12 55 subtitleBlueColor,
           drawFieldRow row 0 10 "HOST" hostStr,
@@ -54,6 +58,7 @@ drawMainPanel ms netSt =
           drawActionRow row 3 (-110) "CONNECT TO PROVIDED HOST",
           drawNetStatusBox netLine errLine
         ]
+          ++ lobbyRow
 
 netStatusLine :: NetSubState -> String
 netStatusLine netSt = case netSt of
