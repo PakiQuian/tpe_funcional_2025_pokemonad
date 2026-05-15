@@ -35,3 +35,14 @@ Thumbs.db
 # Misc
 *.vim
 *.md
+
+# LaTeX
+informe/*.aux
+informe/*.fdb_latexmk
+informe/*.fls
+informe/*.log
+informe/*.out
+informe/*.synctex.gz
+informe/*.toc
+informe/*.bbl
+informe/*.blg

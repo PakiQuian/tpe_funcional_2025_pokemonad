@@ -1,0 +1,44 @@
+{
+  "latex-workshop.latex.autoBuild.run": "onSave",
+  "latex-workshop.latex.autoClean.run": "onBuilt",
+  "latex-workshop.latex.clean.fileTypes": [
+    "*.aux",
+    "*.bbl",
+    "*.blg",
+    "*.fdb_latexmk",
+    "*.fls",
+    "*.log",
+    "*.out",
+    "*.synctex.gz",
+    "*.toc",
+    "*.bcf",
+    "*.run.xml",
+    "*.lof",
+    "*.lot",
+    "*.lol"
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "pdflatex -> bibtex -> pdflatex*2",
+      "tools": ["pdflatex", "bibtex", "pdflatex", "pdflatex", "remove-bbl"]
+    }
+  ],
+  "latex-workshop.latex.tools": [
+    {
+      "name": "pdflatex",
+      "command": "pdflatex",
+      "args": [
+        "-synctex=1",
+        "-interaction=nonstopmode",
+        "-file-line-error",
+        "%DOC%"
+      ]
+    },
+    { "name": "bibtex", "command": "bibtex", "args": ["%DOCFILE%"] },
+    {
+      "name": "remove-bbl",
+      "command": "cmd",
+      "args": ["/c", "del", "/f", "/q", "%DOCFILE%.bbl"]
+    }
+  ]
+}

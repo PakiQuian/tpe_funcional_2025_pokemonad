@@ -1,0 +1,48 @@
+\section{Marco Teórico y Conceptos de Programación Funcional}
+
+El desarrollo de un motor interactivo como \textbf{Pokemonad} en Haskell exige aplicar los pilares del paradigma funcional puro para garantizar un código predecible, testeable y seguro \cite{haskell2010}.
+
+\subsection{Características del Paradigma a poner en juego}
+
+Las características centrales puestas en juego son:
+
+\begin{itemize}
+    \item \textbf{Inmutabilidad:} A diferencia de los lenguajes imperativos donde el estado de un objeto se sobreescribe en memoria, en Haskell las estructuras de datos son inmutables. En el proyecto, cuando un Pokémon recibe daño, no se modifica su variable interna de puntos de vida. En su lugar, el módulo \texttt{Pokemonad.Battle.State} genera una copia completamente nueva del estado de la batalla que refleja la reducción de salud, preservando el estado anterior de forma intacta.
+    \item \textbf{Funciones Puras:} Una función pura garantiza que, para los mismos argumentos de entrada, siempre retornará el mismo resultado sin producir efectos secundarios. Los cálculos delegados a \texttt{Pokemonad.Battle.Logic} y \texttt{Pokemonad.Battle.Damage} son puros; el daño resultante de un ataque depende estrictamente de las estadísticas del atacante, del defensor y de las propiedades del movimiento, lo que permite razonar matemáticamente sobre el combate y facilita enormemente las pruebas unitarias.
+    \item \textbf{Tipos de Datos Algebraicos (ADTs):} Los ADTs permiten modelar el dominio del problema de forma expresiva y segura en tiempo de compilación. A través de módulos como \texttt{Pokemonad.Core.Types}, \texttt{Pokemonad.Core.Move} y \texttt{Pokemonad.Core.Pokemon}, el sistema representa exhaustivamente los tipos elementales, los movimientos y los estados de los entrenadores (\texttt{Pokemonad.Core.Trainer}), evitando estados inválidos o transiciones ilógicas.
+    \item \textbf{Funciones de Orden Superior y Composición:} La capacidad de pasar funciones como parámetros o retornarlas permite construir lógicas complejas a partir de piezas simples. En la evaluación de la Inteligencia Artificial (\texttt{Pokemonad.AI.Model} y \texttt{Pokemonad.AI.Decision}), las funciones de orden superior extraen y ponderan características del entorno de forma declarativa para construir árboles de decisión limpios \cite{hutton2016}.
+    \item \textbf{Evaluación Perezosa (Lazy Evaluation):} Haskell no evalúa una expresión hasta que su resultado es estrictamente necesario. En el contexto de la simulación de turnos o en la generación de ramificaciones de decisiones para la IA, la evaluación perezosa permite definir espacios de estados potencialmente gigantescos sin incurrir en costos de memoria o procesamiento inmediatos, computando únicamente el camino que el motor decide explorar.
+\end{itemize}
+
+\subsection{Desafíos en Programación Funcional y Uso de Mónadas}
+
+Construir un videojuego interactivo y multijugador bajo el rigor funcional impone desafíos de diseño, fundamentalmente al lidiar con mutabilidad, interacción externa y concurrencia. Para abordar esto, Pokemonad implementa un patrón de diseño conocido como ``Pure Core + Thin IO Layer'', separando estrictamente el \texttt{game-engine} (núcleo puro) del \texttt{game-client} y \texttt{p2p-net} (capas de interacción). 
+
+Las herramientas fundamentales para resolver estos desafíos son las \textbf{mónadas}, las cuales encapsulan el contexto computacional de las operaciones:
+
+\begin{itemize}
+    \item \textbf{Modelado del Estado Dinámico (Mónadas \texttt{State} y Transformadores \texttt{StateT}):} Simular el cambio de estado turno a turno requiere propagar estructuras complejas. La biblioteca \texttt{mtl} \cite{mtl_docs} permite utilizar \texttt{State} o \texttt{StateT} para enhebrar implícitamente el contexto del juego (\texttt{Pokemonad.Battle.State} y \texttt{Client.State}) a través de las operaciones. Esto otorga la conveniencia sintáctica de la mutabilidad secuencial sin sacrificar la pureza matemática subyacente.
+    \item \textbf{Interacción con el Medio (Mónada \texttt{IO}):} Todo efecto secundario (dibujar en pantalla, leer el teclado o acceder al disco) debe confinarse en \texttt{IO}. La capa visual manejada en \texttt{Client.Render} y \texttt{Client.Drawing}, así como la lectura de archivos de entrenamiento como \texttt{data/ai\_checkpoint.txt}, ocurren dentro de este contexto asilado, protegiendo al motor puro de inconsistencias.
+    \item \textbf{Concurrencia y Sincronización Multijugador (Mónada \texttt{STM}):} El mayor desafío del multijugador P2P es gestionar la memoria compartida entre el hilo de red (escuchando sockets) y el hilo gráfico (renderizando el juego) sin incurrir en condiciones de carrera. El proyecto utiliza \texttt{STM} (Software Transactional Memory) \cite{peytonjones2007} para garantizar que los intercambios de estado y eventos en la red ocurran de manera atómica, coordinada y sin bloqueos explícitos (deadlocks).
+    \item \textbf{Aleatoriedad en un Entorno Puro:} La generación de eventos probabilísticos requiere romper el determinismo trivial. Esto se resuelve pasando explícitamente generadores pseudoaleatorios (\texttt{random}) a través de las funciones puras en \texttt{Pokemonad.Battle.Turn} y los módulos de decisión de la IA, garantizando que la simulación completa sea reproducible.
+    \item \textbf{Manejo de Errores y Fallos (Mónadas \texttt{Either} y \texttt{Maybe}):} Para la comunicación en red a través de \texttt{P2P.Serialization} y \texttt{Client.NetSerializers}, el parseo de bytes entrantes puede fallar. En lugar de lanzar excepciones que rompan el flujo de ejecución, se utilizan contextos como \texttt{Either} o \texttt{Maybe} para representar de forma explícita y segura el éxito o fracaso de la decodificación.
+\end{itemize}
+
+\subsection{Herramientas y Bibliotecas Utilizadas}
+
+Para materializar esta arquitectura, el proyecto se apoya en un ecosistema robusto gestionado mediante \textbf{Cabal} \cite{cabal_guide}, la herramienta estándar de Haskell para definir dependencias, compilar y organizar la solución en tres paquetes interconectados (\texttt{game-engine}, \texttt{p2p-net} y \texttt{game-client}).
+
+\begin{itemize}
+    \item \textbf{\texttt{network}}: Provee el acceso de bajo nivel a los sockets TCP en \texttt{P2P.Communication}, estableciendo los canales directos requeridos para la arquitectura Peer-to-Peer.
+    \item \textbf{\texttt{stm}}: Fundamental para la arquitectura asincrónica. Proporciona las primitivas de memoria transaccional para coordinar de forma segura el estado del cliente y los mensajes recibidos a través de la red.
+    \item \textbf{\texttt{binary} y \texttt{bytestring}}: Utilizados en \texttt{P2P.Serialization} y \texttt{Client.NetSerializers}. Permiten manipular secuencias de bytes crudas y proveen las clases de tipos necesarias para empaquetar y desempaquetar eficientemente los mensajes del protocolo para su envío por la red.
+    \item \textbf{\texttt{mtl}} (Monad Transformer Library): Extensión esencial empleada exhaustivamente en el \texttt{game-engine} para combinar mónadas sin acoplar lógicas de infraestructura a la lógica de negocio.
+    \item \textbf{\texttt{random}}: Implementa la lógica de generación de números pseudoaleatorios, indispensable tanto para la incertidumbre del combate como para las dinámicas de exploración en el entrenamiento de la Inteligencia Artificial (\texttt{Pokemonad.AI.Training}).
+    \item \textbf{\texttt{gloss} y \texttt{gloss-juicy}}: Ecosistema gráfico funcional elegido para \texttt{game-client}. \texttt{gloss} permite renderizar escenas 2D de forma puramente declarativa conectándolas a modelos de estado, mientras que \texttt{gloss-juicy} extiende estas capacidades permitiendo cargar y manipular imágenes rasterizadas complejas alojadas en la carpeta \texttt{assets}.
+    \item \textbf{\texttt{containers} y \texttt{text}}: Proporcionan estructuras de datos eficientes (como mapas) utilizadas para indexar elementos, y permiten manejar cadenas de caracteres Unicode con alta eficiencia de memoria en la interfaz, superando a las listas de caracteres nativas.
+\end{itemize}
+
+\vspace{0.5cm}
+\noindent La elección de programación funcional pura, soportada por mónadas transaccionales y de estado, garantiza que la complejidad inherente a un sistema multijugador concurrido y de comportamiento no determinista permanezca manejable. Estas bases teóricas sientan el terreno propicio para comprender la división arquitectónica y las decisiones de diseño estructural de las siguientes secciones.
+
+\clearpage

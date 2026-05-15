@@ -1,0 +1,27 @@
+\section{Introducción}
+
+\subsection{Contexto y Motivación}
+El presente trabajo describe el desarrollo de \textbf{Pokemonad}, un motor de juego de combate por turnos inspirado en la mecánica clásica de Pokémon, construido íntegramente utilizando el lenguaje de programación funcional Haskell. 
+
+La motivación principal del proyecto no radica en la réplica exhaustiva de las complejas reglas del juego original, sino en utilizar este dominio interactivo como vehículo para explorar y resolver problemas de ingeniería de software dentro del paradigma funcional. Tras la etapa de ideación y evaluación de alcance, el enfoque del proyecto se centró en dos grandes desafíos técnicos: la implementación de una arquitectura de red descentralizada Peer-to-Peer (P2P) concurrente y segura, y el desarrollo de una Inteligencia Artificial no trivial para el modo de un solo jugador. 
+
+Para lograr la profundidad requerida en estos subsistemas, se tomó la decisión arquitectónica de mantener la lógica de dominio del combate en su forma más pura y básica. Las interacciones se restringieron exclusivamente a acciones de ataque directo (\textit{FIGHT}) y cambio de criaturas (\textit{SWITCH}), omitiendo alteraciones de estado, modificadores de estadísticas y habilidades pasivas. Esta reducción deliberada del alcance permite concentrar el esfuerzo de desarrollo en la gestión del estado concurrente y en los árboles de decisión del bot oponente.
+
+\subsection{Objetivos del Proyecto}
+El objetivo general del trabajo es demostrar la aplicación práctica de conceptos avanzados de programación funcional, tales como la inmutabilidad, la evaluación de funciones puras, y el manejo de efectos a través de mónadas, en la construcción de un sistema de software interactivo y distribuido. 
+
+Los objetivos específicos, acordados y delimitados para el alcance de este trabajo, incluyen:
+\begin{itemize}
+    \item \textbf{Desarrollo de una biblioteca P2P independiente:} Diseñar un módulo de comunicación de bajo nivel mediante sockets TCP puro. Este subsistema gestiona la recepción asincrónica de flujos de bytes (con serialización binaria en tramas) y delega la sincronización de estados concurrentes mediante Memoria Transaccional en Software (STM, usando \texttt{TQueue}). Este módulo opera de forma completamente desacoplada de las reglas de \textit{Pokemonad}, constituyendo una biblioteca genérica.
+    \item \textbf{Implementación de un oponente controlado por IA:} Construir un agente inteligente para el modo de un jugador que supere la toma de decisiones heurística trivial. Se implementó un modelo basado en \textbf{Aprendizaje por Refuerzo (Reinforcement Learning)}, utilizando una aproximación lineal para estimar los valores Q (Q-Values) a partir de la extracción de características del entorno (ventaja de tipos, proyecciones de daño y viabilidad de cambio de criaturas). La selección de acciones se rige por una política $\epsilon$-greedy parametrizada según la dificultad del oponente.
+    \item \textbf{Integración de una Interfaz Gráfica (GUI):} Proveer una capa visual interactiva utilizando la biblioteca \texttt{gloss}. Esta herramienta permite renderizar gráficos 2D de forma declarativa, exponiendo el estado inmutable del motor en tiempo real e integrándose fluidamente con el bucle principal de la aplicación.
+\end{itemize}
+
+\subsection{Integrantes y Metodología de Trabajo}
+El proyecto fue diseñado y desarrollado íntegramente por Francisco Quian Blanco y Theo Stanfield. 
+
+Dada la complejidad inherente de orquestar un hilo de red asincrónico junto con un hilo de interfaz gráfica (UI) evitando condiciones de carrera, se adoptó una metodología de desarrollo colaborativa y altamente comunicativa. La división de tareas se gestionó de manera dinámica apoyándose en un sistema de control de versiones. 
+
+Para los componentes críticos de la arquitectura —particularmente el aislamiento de la biblioteca P2P y la implementación de la IA— se priorizó el trabajo conjunto mediante sesiones de \textit{pair programming}. Para el desarrollo de módulos individuales, se establecieron revisiones de código cruzadas (\textit{code reviews}). Esta metodología garantiza no solo el avance equilibrado del proyecto, sino que asegura que ambos integrantes mantengan un conocimiento total y un manejo profundo de cada aspecto del código fuente producido, cumpliendo rigurosamente con los requisitos de evaluación.
+
+\clearpage
