@@ -68,49 +68,62 @@ candidateActions bState =
 
 extractFeatures :: BattleState -> BattleAction -> FeatureVector
 extractFeatures bState action =
-  [ selfHpRatio,
-    opponentHpRatio,
-    expectedDamageRatio,
-    normalizedTypeEffectiveness,
-    speedAdvantage,
-    koEstimate,
-    switchDefensiveGain,
-    switchOffensiveGain,
-    isMoveAction,
-    isSwitchAction
-  ]
-  where
-    selfActive = enemyActive bState
-    opponentActive = playerActive bState
-    selfHpRatio = safeRatio (unHP (battlePokemonHp selfActive)) (unHP (battlePokemonMaxHp selfActive))
-    opponentHpRatio = safeRatio (unHP (battlePokemonHp opponentActive)) (unHP (battlePokemonMaxHp opponentActive))
-    speedAdvantage =
-      normalizeSigned $
-        fromIntegral (statsSpeed (pokemonStats (battlePokemonBase selfActive)) - statsSpeed (pokemonStats (battlePokemonBase opponentActive))) / 100.0
-    (expectedDamageRatio, normalizedTypeEffectiveness, koEstimate) = case action of
-      ActionMove moveIdx ->
-        case safeAt moveIdx (battlePokemonMoves selfActive) of
-          Nothing -> (0.0, 0.5, 0.0)
-          Just selectedMove ->
-            let dmg = unHP (estimateDamage selfActive opponentActive selectedMove)
-                maxOppHp = max 1 (unHP (battlePokemonMaxHp opponentActive))
-                dmgRatio = clamp01 (fromIntegral dmg / fromIntegral maxOppHp)
-                eff = moveTypeEffectiveness selectedMove opponentActive
-                effNorm = normalizeTypeEffectiveness eff
-                ko = if dmg >= unHP (battlePokemonHp opponentActive) then 1.0 else 0.0
-             in (dmgRatio, effNorm, ko)
-      ActionSwitch _ -> (0.0, 0.5, 0.0)
-    (switchDefensiveGain, switchOffensiveGain) = case action of
-      ActionSwitch benchIdx ->
-        case safeAt benchIdx (enemyBench bState) of
-          Nothing -> (0.0, 0.0)
-          Just incoming ->
-            ( estimateSwitchDefensiveGain selfActive incoming opponentActive,
-              estimateSwitchOffensiveGain selfActive incoming opponentActive
-            )
-      _ -> (0.0, 0.0)
-    isMoveAction = case action of ActionMove _ -> 1.0; _ -> 0.0
-    isSwitchAction = case action of ActionSwitch _ -> 1.0; _ -> 0.0
+  let selfActive                          = enemyActive bState
+      opponentActive                      = playerActive bState
+      selfHpRatio                         = safeRatio (unHP (battlePokemonHp selfActive))     (unHP (battlePokemonMaxHp selfActive))
+      opponentHpRatio                     = safeRatio (unHP (battlePokemonHp opponentActive)) (unHP (battlePokemonMaxHp opponentActive))
+      speedAdvantage                      = normalizeSigned (fromIntegral (statsSpeed (pokemonStats (battlePokemonBase selfActive)) - statsSpeed (pokemonStats (battlePokemonBase opponentActive))) / 100.0)
+      (dmgRatio, effNorm, koEstimate)     = moveFeatures   bState action
+      (switchDefGain, switchOffGain)      = switchFeatures bState action
+      isMoveAction                        = case action of ActionMove _   -> 1.0; _ -> 0.0
+      isSwitchAction                      = case action of ActionSwitch _ -> 1.0; _ -> 0.0
+   in [ selfHpRatio,
+        opponentHpRatio,
+        dmgRatio,
+        effNorm,
+        speedAdvantage,
+        koEstimate,
+        switchDefGain,
+        switchOffGain,
+        isMoveAction,
+        isSwitchAction
+      ]
+
+-- | Damage-related features for an ActionMove. Returns (damage ratio,
+--   normalized type effectiveness, KO indicator). Defaults for non-move
+--   actions or out-of-range move indices.
+moveFeatures :: BattleState -> BattleAction -> (Float, Float, Float)
+moveFeatures bState action =
+  let selfActive     = enemyActive bState
+      opponentActive = playerActive bState
+   in case action of
+        ActionMove moveIdx ->
+          case safeAt moveIdx (battlePokemonMoves selfActive) of
+            Nothing -> (0.0, 0.5, 0.0)
+            Just selectedMove ->
+              let dmg      = unHP (estimateDamage selfActive opponentActive selectedMove)
+                  maxOppHp = max 1 (unHP (battlePokemonMaxHp opponentActive))
+                  dmgRatio = clamp01 (fromIntegral dmg / fromIntegral maxOppHp)
+                  effNorm  = normalizeTypeEffectiveness (moveTypeEffectiveness selectedMove opponentActive)
+                  ko       = if dmg >= unHP (battlePokemonHp opponentActive) then 1.0 else 0.0
+               in (dmgRatio, effNorm, ko)
+        _ -> (0.0, 0.5, 0.0)
+
+-- | Switch-related features for an ActionSwitch. Returns (defensive gain,
+--   offensive gain). Zero for non-switch actions or invalid bench indices.
+switchFeatures :: BattleState -> BattleAction -> (Float, Float)
+switchFeatures bState action =
+  let selfActive     = enemyActive bState
+      opponentActive = playerActive bState
+   in case action of
+        ActionSwitch benchIdx ->
+          case safeAt benchIdx (enemyBench bState) of
+            Nothing -> (0.0, 0.0)
+            Just incoming ->
+              ( estimateSwitchDefensiveGain selfActive incoming opponentActive,
+                estimateSwitchOffensiveGain selfActive incoming opponentActive
+              )
+        _ -> (0.0, 0.0)
 
 qValue :: QWeights -> BattleState -> BattleAction -> Float
 qValue weights bState action =
@@ -178,20 +191,18 @@ estimateDamage attacker defender selectedMove =
 
 estimateSwitchDefensiveGain :: BattlePokemon -> BattlePokemon -> BattlePokemon -> Float
 estimateSwitchDefensiveGain current incoming opponent =
-  normalizeSigned ((bestThreatAgainst current opponent - bestThreatAgainst incoming opponent) / 2.0)
+  normalizeSigned ((bestMoveEffectiveness opponent current - bestMoveEffectiveness opponent incoming) / 2.0)
 
 estimateSwitchOffensiveGain :: BattlePokemon -> BattlePokemon -> BattlePokemon -> Float
 estimateSwitchOffensiveGain current incoming opponent =
-  normalizeSigned ((bestOffenseFor incoming opponent - bestOffenseFor current opponent) / 2.0)
+  normalizeSigned ((bestMoveEffectiveness incoming opponent - bestMoveEffectiveness current opponent) / 2.0)
 
-bestOffenseFor :: BattlePokemon -> BattlePokemon -> Float
-bestOffenseFor attacker defender =
-  case battlePokemonMoves attacker of
-    [] -> 1.0
-    moves -> maximum (map (`moveTypeEffectiveness` defender) moves)
-
-bestThreatAgainst :: BattlePokemon -> BattlePokemon -> Float
-bestThreatAgainst defender attacker =
+-- | Maximum type-effectiveness any of the attacker's moves can land on the
+--   defender. Used both as "best offense by attacker against defender" and
+--   "best threat the attacker poses to the defender" (same computation, two
+--   readings of the same value).
+bestMoveEffectiveness :: BattlePokemon -> BattlePokemon -> Float
+bestMoveEffectiveness attacker defender =
   case battlePokemonMoves attacker of
     [] -> 1.0
     moves -> maximum (map (`moveTypeEffectiveness` defender) moves)

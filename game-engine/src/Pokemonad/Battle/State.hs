@@ -13,6 +13,7 @@ module Pokemonad.Battle.State
     initBattleFromTeams,
     makeBattlePokemon,
     flipBattleState,
+    flipBattleStep,
   )
 where
 
@@ -135,6 +136,11 @@ flipBattleState bs =
       enemyBench = playerBench bs,
       phase = flipPhase (phase bs)
     }
+
+-- | Flip both the state and the (still-from-host's-perspective) logs of a
+--   battle step. Used when the host ships a turn's frames to its peer.
+flipBattleStep :: (BattleState, [String]) -> (BattleState, [String])
+flipBattleStep (st, logs) = (flipBattleState st, logs)
 
 flipPhase :: BattlePhase -> BattlePhase
 flipPhase WaitingForForcedPlayerSwitch = WaitingForForcedEnemySwitch

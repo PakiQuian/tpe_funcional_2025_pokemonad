@@ -29,24 +29,33 @@ import Graphics.Gloss
     translate,
     white,
   )
-import Pokemonad.Battle.State (BattlePhase (..), BattlePokemon (..), BattleState (..))
+import Pokemonad.Battle.State (BattlePhase (..), BattlePokemon (..), BattleState (..), Side (..))
 import Pokemonad.Core.Move (Move (..))
 import Pokemonad.Core.Pokemon (Pokemon (..))
 import Pokemonad.Core.Types (HP (..), PokemonId (..))
 
-drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map PokemonId Picture -> Map.Map PokemonId Picture -> Int -> BattleMenuType -> Int -> Int -> Picture
-drawBattleScreen backgrounds bgIndex maybeState pokeFrontSprites pokeBackSprites menuIndex menuType moveIndex benchIndex =
+drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map PokemonId Picture -> Map.Map PokemonId Picture -> Int -> BattleMenuType -> Int -> Int -> Maybe Side -> Float -> Picture
+drawBattleScreen backgrounds bgIndex maybeState pokeFrontSprites pokeBackSprites menuIndex menuType moveIndex benchIndex shakeTarget shakeTimer =
   let bg = if null backgrounds then blank else backgrounds !! (bgIndex `mod` length backgrounds)
+      enemyOffset  = shakeOffsetFor EnemySide  shakeTarget shakeTimer
+      playerOffset = shakeOffsetFor PlayerSide shakeTarget shakeTimer
    in case maybeState of
         Nothing -> pictures [bg, drawTextWithShadow "PREPARING BATTLE..." 0.2 0 white]
         Just state ->
           pictures
             [ bg,
-              drawEnemyUnit (enemyActive state) pokeFrontSprites,
-              drawPlayerUnit (playerActive state) pokeBackSprites,
+              drawEnemyUnit (enemyActive state) pokeFrontSprites enemyOffset,
+              drawPlayerUnit (playerActive state) pokeBackSprites playerOffset,
               drawBattleLogWindow (battleLog state),
               drawBattleMenu (phase state) (playerActive state) (playerBench state) menuIndex menuType moveIndex benchIndex
             ]
+
+-- | Horizontal pixel offset for a sprite when its side is the shake target.
+--   The offset oscillates and decays to 0 as the timer reaches 0.
+shakeOffsetFor :: Side -> Maybe Side -> Float -> Float
+shakeOffsetFor side (Just target) timer
+  | side == target && timer > 0 = sin (timer * 60) * 8
+shakeOffsetFor _ _ _ = 0
 
 drawBattleLogWindow :: [String] -> Picture
 drawBattleLogWindow logs =
@@ -70,21 +79,21 @@ drawBattleLogWindow logs =
 takeLast :: Int -> [a] -> [a]
 takeLast n xs = drop (length xs - min n (length xs)) xs
 
-drawEnemyUnit :: BattlePokemon -> Map.Map PokemonId Picture -> Picture
-drawEnemyUnit bp spriteMap =
+drawEnemyUnit :: BattlePokemon -> Map.Map PokemonId Picture -> Float -> Picture
+drawEnemyUnit bp spriteMap shakeOffset =
   translate 360 190 $
     pictures
-      [ case Map.lookup (pokemonId (battlePokemonBase bp)) spriteMap of
+      [ translate shakeOffset 0 $ case Map.lookup (pokemonId (battlePokemonBase bp)) spriteMap of
           Just pic -> scale 2.5 2.5 pic
           Nothing -> scale 0.2 0.2 $ text "?",
         translate (-220) 80 $ drawHUD bp
       ]
 
-drawPlayerUnit :: BattlePokemon -> Map.Map PokemonId Picture -> Picture
-drawPlayerUnit bp spriteMap =
+drawPlayerUnit :: BattlePokemon -> Map.Map PokemonId Picture -> Float -> Picture
+drawPlayerUnit bp spriteMap shakeOffset =
   translate (-210) (-105) $
     pictures
-      [ case Map.lookup (pokemonId (battlePokemonBase bp)) spriteMap of
+      [ translate shakeOffset 0 $ case Map.lookup (pokemonId (battlePokemonBase bp)) spriteMap of
           Just pic -> scale 4.5 4.5 pic
           Nothing -> scale 0.2 0.2 $ text "?",
         translate (-220) 80 $ drawHUD bp
@@ -122,7 +131,6 @@ drawBattleMenu battlePhase activePokemon bench menuIdx menuType moveIdx benchIdx
         QuitConfirmMenu -> drawQuitMenu moveIdx
         PokemonMenu -> drawPokemonMenu bench benchIdx
         SwitchConfirmMenu -> drawSwitchConfirmMenu bench benchIdx moveIdx
-        BagMenu -> blank
 
 drawMainMenu :: BattlePokemon -> Int -> Picture
 drawMainMenu activePokemon menuIdx =
@@ -136,10 +144,9 @@ drawMainMenu activePokemon menuIdx =
 drawOptionsGrid :: Int -> Picture
 drawOptionsGrid menuIndex =
   pictures
-    [ drawMenuOption 0 "FIGHT" (-150) 25 menuIndex,
-      drawMenuOption 1 "BAG" 80 25 menuIndex,
-      drawMenuOption 2 "POKEMON" (-150) (-35) menuIndex,
-      drawMenuOption 3 "QUIT" 80 (-35) menuIndex
+    [ drawMenuOption 0 "FIGHT" (-220) 0 menuIndex,
+      drawMenuOption 1 "POKEMON" (-50) 0 menuIndex,
+      drawMenuOption 2 "QUIT" 180 0 menuIndex
     ]
 
 drawFightMenu :: BattlePokemon -> Int -> Picture

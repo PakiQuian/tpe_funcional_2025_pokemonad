@@ -26,7 +26,7 @@ import Pokemonad.Battle.State
     Winner (..),
     initBattle,
   )
-import Pokemonad.Battle.Turn (executeTurn)
+import Pokemonad.Battle.Turn (executeTurn, finalStateOf)
 import Pokemonad.Core.Trainer (Trainer (..), allTrainers)
 import Pokemonad.Core.Types (HP (..))
 import System.Random (StdGen, randomR)
@@ -49,6 +49,25 @@ data TrainingRunSummary = TrainingRunSummary
   }
   deriving (Show, Eq)
 
+-- | Running best-scoring epoch seen during a training run.
+data BestCheckpoint = BestCheckpoint
+  { bestWeights :: QWeights,
+    bestEpoch :: Int,
+    bestScore :: Float
+  }
+  deriving (Show, Eq)
+
+-- | Running totals accumulated across all episodes within one epoch.
+data EpisodeTotals = EpisodeTotals
+  { totalReward :: Float,
+    totalWins :: Int,
+    totalTurns :: Int
+  }
+  deriving (Show, Eq)
+
+emptyEpisodeTotals :: EpisodeTotals
+emptyEpisodeTotals = EpisodeTotals {totalReward = 0.0, totalWins = 0, totalTurns = 0}
+
 runTrainingEpochs :: StdGen -> TrainingHyperParams -> Int -> (QWeights, [EpochMetrics], StdGen)
 runTrainingEpochs rng params epochs =
   let (summary, nextRng) = runTrainingEpochsDetailed rng params epochs
@@ -66,15 +85,18 @@ runTrainingEpochsDetailed rng params epochs =
 runTrainingEpochsDetailedFrom :: StdGen -> TrainingHyperParams -> Int -> QWeights -> (TrainingRunSummary, StdGen)
 runTrainingEpochsDetailedFrom rng params epochs initialWeights =
   let usableTrainers = trainingTrainers
-      initialBest = (initialWeights, -1, -1.0e30 :: Float)
-      (finalWeights, bestWeights, bestEpoch, bestScore, metrics, nextRng) =
+      initialBest    = BestCheckpoint {bestWeights = initialWeights, bestEpoch = -1, bestScore = -1.0e30}
+      (finalWeights, finalBest, metrics, nextRng) =
         trainEpochLoop rng params usableTrainers initialWeights initialBest [] 0 epochs
+      neverImproved = bestEpoch finalBest < 0
+      fallbackEpoch = if neverImproved then max 0 (epochs - 1) else bestEpoch finalBest
+      fallbackScore = if neverImproved then 0.0                 else bestScore finalBest
    in ( TrainingRunSummary
-          { summaryFinalWeights = finalWeights,
-            summaryCanonicalWeights = bestWeights,
-            summaryCanonicalEpoch = bestEpoch,
-            summaryCanonicalScore = bestScore,
-            summaryMetrics = metrics
+          { summaryFinalWeights     = finalWeights,
+            summaryCanonicalWeights = bestWeights finalBest,
+            summaryCanonicalEpoch   = fallbackEpoch,
+            summaryCanonicalScore   = fallbackScore,
+            summaryMetrics          = metrics
           },
         nextRng
       )
@@ -84,27 +106,22 @@ trainEpochLoop ::
   TrainingHyperParams ->
   [Trainer] ->
   QWeights ->
-  (QWeights, Int, Float) ->
+  BestCheckpoint ->
   [EpochMetrics] ->
   Int ->
   Int ->
-  (QWeights, QWeights, Int, Float, [EpochMetrics], StdGen)
-trainEpochLoop rng _params _trainers weights bestState metrics epochIdx totalEpochs
-  | epochIdx >= totalEpochs =
-      let (bestWeights, bestEpoch, bestScore) = bestState
-          fallbackEpoch = if bestEpoch < 0 then max 0 (totalEpochs - 1) else bestEpoch
-          fallbackScore = if bestEpoch < 0 then 0.0 else bestScore
-       in (weights, bestWeights, fallbackEpoch, fallbackScore, reverse metrics, rng)
-trainEpochLoop rng params trainers weights bestState metrics epochIdx totalEpochs =
-  let epsilon = epsilonAtEpoch params epochIdx
+  (QWeights, BestCheckpoint, [EpochMetrics], StdGen)
+trainEpochLoop rng _params _trainers weights best metrics epochIdx totalEpochs
+  | epochIdx >= totalEpochs = (weights, best, reverse metrics, rng)
+trainEpochLoop rng params trainers weights best metrics epochIdx totalEpochs =
+  let epsilon                                          = epsilonAtEpoch params epochIdx
       (weightsAfterEpoch, epochMetrics, rngAfterEpoch) = runSingleEpoch rng params trainers weights epochIdx epsilon
-      currentScore = checkpointSelectionScore epochMetrics
-      (prevBestWeights, prevBestEpoch, prevBestScore) = bestState
-      nextBestState =
-        if currentScore > prevBestScore
-          then (weightsAfterEpoch, epochIdx, currentScore)
-          else (prevBestWeights, prevBestEpoch, prevBestScore)
-   in trainEpochLoop rngAfterEpoch params trainers weightsAfterEpoch nextBestState (epochMetrics : metrics) (epochIdx + 1) totalEpochs
+      currentScore                                     = checkpointSelectionScore epochMetrics
+      improved                                         = currentScore > bestScore best
+      nextBest
+        | improved  = BestCheckpoint {bestWeights = weightsAfterEpoch, bestEpoch = epochIdx, bestScore = currentScore}
+        | otherwise = best
+   in trainEpochLoop rngAfterEpoch params trainers weightsAfterEpoch nextBest (epochMetrics : metrics) (epochIdx + 1) totalEpochs
 
 runSingleEpoch ::
   StdGen ->
@@ -115,17 +132,16 @@ runSingleEpoch ::
   Float ->
   (QWeights, EpochMetrics, StdGen)
 runSingleEpoch rng params trainers weights epochIdx epsilon =
-  let episodesPerEpoch = 20
-      (finalWeights, totalReward, totalWins, totalTurns, rngAfter) =
-        runEpisodes rng params trainers weights epsilon episodesPerEpoch 0.0 0 0
-      episodeCountF = fromIntegral episodesPerEpoch :: Float
+  let episodesPerEpoch                       = 20
+      (finalWeights, totals, rngAfter)       = runEpisodes rng params trainers weights epsilon episodesPerEpoch emptyEpisodeTotals
+      episodeCountF                          = fromIntegral episodesPerEpoch :: Float
       metrics =
         EpochMetrics
-          { epochIndex = epochIdx,
-            epochEpsilon = epsilon,
-            epochAverageReward = totalReward / episodeCountF,
-            epochWinRate = fromIntegral totalWins / episodeCountF,
-            epochAverageTurns = fromIntegral totalTurns / episodeCountF
+          { epochIndex         = epochIdx,
+            epochEpsilon       = epsilon,
+            epochAverageReward = totalReward totals / episodeCountF,
+            epochWinRate       = fromIntegral (totalWins totals) / episodeCountF,
+            epochAverageTurns  = fromIntegral (totalTurns totals) / episodeCountF
           }
    in (finalWeights, metrics, rngAfter)
 
@@ -136,18 +152,20 @@ runEpisodes ::
   QWeights ->
   Float ->
   Int ->
-  Float ->
-  Int ->
-  Int ->
-  (QWeights, Float, Int, Int, StdGen)
-runEpisodes rng _params _trainers weights _epsilon 0 accReward accWins accTurns =
-  (weights, accReward, accWins, accTurns, rng)
-runEpisodes rng params trainers weights epsilon remaining accReward accWins accTurns =
+  EpisodeTotals ->
+  (QWeights, EpisodeTotals, StdGen)
+runEpisodes rng _params _trainers weights _epsilon 0 totals = (weights, totals, rng)
+runEpisodes rng params trainers weights epsilon remaining totals =
   let (battleState0, rngAfterInit) = sampleInitialBattle rng trainers
       (weightsAfterEpisode, episodeReward, didWinEnemySide, episodeTurns, rngAfterEpisode) =
         runSelfPlayEpisode rngAfterInit params weights epsilon battleState0
-      nextWins = if didWinEnemySide then accWins + 1 else accWins
-   in runEpisodes rngAfterEpisode params trainers weightsAfterEpisode epsilon (remaining - 1) (accReward + episodeReward) nextWins (accTurns + episodeTurns)
+      nextTotals =
+        totals
+          { totalReward = totalReward totals + episodeReward,
+            totalWins   = totalWins totals   + (if didWinEnemySide then 1 else 0),
+            totalTurns  = totalTurns totals  + episodeTurns
+          }
+   in runEpisodes rngAfterEpisode params trainers weightsAfterEpisode epsilon (remaining - 1) nextTotals
 
 runSelfPlayEpisode ::
   StdGen ->
@@ -170,15 +188,17 @@ runSelfPlayEpisode rng params initialWeights epsilon battleState0 =
           | turnAcc >= maxTurns ->
               (weightsNow, rewardAcc, False, turnAcc, rngNow)
         _ ->
-          let mirroredState = mirrorBattleState bState
-              (playerMaybeAction, rng1) = chooseActionEpsilon rngNow epsilon weightsNow mirroredState
-              (enemyMaybeAction, rng2) = chooseActionEpsilon rng1 epsilon weightsNow bState
-              playerAction = maybe (ActionMove 0) id playerMaybeAction
-              enemyAction = maybe (ActionMove 0) id enemyMaybeAction
-              (nextState, rng3) = executeTurn rng2 bState playerAction enemyAction
-              enemyReward = transitionReward rw bState nextState
-              weightsAfterEnemy = tdUpdate params weightsNow bState enemyAction enemyReward nextState
-              weightsAfterBoth = tdUpdate params weightsAfterEnemy mirroredState playerAction (transitionReward rw mirroredState (mirrorBattleState nextState)) (mirrorBattleState nextState)
+          let mirroredState              = mirrorBattleState bState
+              (playerMaybeAction, rng1)  = chooseActionEpsilon rngNow epsilon weightsNow mirroredState
+              (enemyMaybeAction, rng2)   = chooseActionEpsilon rng1   epsilon weightsNow bState
+              playerAction               = maybe (ActionMove 0) id playerMaybeAction
+              enemyAction                = maybe (ActionMove 0) id enemyMaybeAction
+              (nextState, rng3)          = finalStateOf bState (executeTurn rng2 bState playerAction enemyAction)
+              mirroredNextState          = mirrorBattleState nextState
+              enemyReward                = transitionReward rw bState         nextState
+              playerReward               = transitionReward rw mirroredState  mirroredNextState
+              weightsAfterEnemy          = tdUpdate params weightsNow        bState         enemyAction  enemyReward  nextState
+              weightsAfterBoth           = tdUpdate params weightsAfterEnemy mirroredState  playerAction playerReward mirroredNextState
            in episodeLoop rng3 weightsAfterBoth nextState (turnAcc + 1) (rewardAcc + enemyReward)
 
 tdUpdate :: TrainingHyperParams -> QWeights -> BattleState -> BattleAction -> Float -> BattleState -> QWeights
@@ -204,22 +224,22 @@ bestQValue weights bState =
 
 transitionReward :: RewardWeights -> BattleState -> BattleState -> Float
 transitionReward rw prevState nextState =
-  let prevEnemy = enemyActive prevState
-      prevPlayer = playerActive prevState
-      nextEnemy = enemyActive nextState
-      nextPlayer = playerActive nextState
+  let prevEnemy       = enemyActive prevState
+      prevPlayer      = playerActive prevState
+      nextEnemy       = enemyActive nextState
+      nextPlayer      = playerActive nextState
       damageInflicted = safeRatio (unHP (battlePokemonHp prevPlayer) - unHP (battlePokemonHp nextPlayer)) (unHP (battlePokemonMaxHp prevPlayer))
-      damageReceived = safeRatio (unHP (battlePokemonHp prevEnemy) - unHP (battlePokemonHp nextEnemy)) (unHP (battlePokemonMaxHp prevEnemy))
-      enemyKO = if unHP (battlePokemonHp nextPlayer) <= 0 then 1.0 else 0.0
-      selfKO = if unHP (battlePokemonHp nextEnemy) <= 0 then 1.0 else 0.0
-      terminalReward = case phase nextState of
+      damageReceived  = safeRatio (unHP (battlePokemonHp prevEnemy)  - unHP (battlePokemonHp nextEnemy))  (unHP (battlePokemonMaxHp prevEnemy))
+      enemyKO         = if unHP (battlePokemonHp nextPlayer) <= 0 then 1.0 else 0.0
+      selfKO          = if unHP (battlePokemonHp nextEnemy)  <= 0 then 1.0 else 0.0
+      terminalReward  = case phase nextState of
         BattleEnded PlayerWon -> rewardWinTerminal rw
-        BattleEnded EnemyWon -> rewardLoseTerminal rw
-        _ -> 0.0
+        BattleEnded EnemyWon  -> rewardLoseTerminal rw
+        _                     -> 0.0
    in rewardDamageInflicted rw * damageInflicted
         + rewardDamageReceived rw * damageReceived
-        + rewardEnemyKnockout rw * enemyKO
-        + rewardSelfKnockout rw * selfKO
+        + rewardEnemyKnockout rw  * enemyKO
+        + rewardSelfKnockout rw   * selfKO
         + terminalReward
         + rewardPerTurnPenalty rw
 

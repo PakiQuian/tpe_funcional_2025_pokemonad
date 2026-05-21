@@ -22,7 +22,8 @@ import qualified Data.Map as Map
 import Graphics.Gloss (Picture)
 import Network.Socket (HostName, PortNumber, Socket)
 import Pokemonad.AI.Model (QWeights)
-import Pokemonad.Battle.State (BattleAction, BattleState)
+import Pokemonad.Battle.State (BattleAction, BattleState, Side)
+import Pokemonad.Battle.Turn (BattleStep)
 import Pokemonad.Core.Types (PokemonId (..), TrainerId (..))
 import System.Random (StdGen)
 
@@ -42,7 +43,6 @@ data Screen
 data BattleMenuType
   = MainBattleMenu
   | FightMenu
-  | BagMenu
   | PokemonMenu
   | SwitchConfirmMenu
   | QuitConfirmMenu
@@ -117,7 +117,11 @@ data BattleScreenState = BattleScreenState
     battleBgIndex :: Int,
     battleIsMultiplayer :: Bool,
     battlePendingLocalAction :: Maybe BattleAction,
-    battlePendingRemoteAction :: Maybe BattleAction
+    battlePendingRemoteAction :: Maybe BattleAction,
+    battlePendingFrames :: [BattleStep],
+    battleFrameTimer :: Float,
+    battleShakeTimer :: Float,
+    battleShakeTarget :: Maybe Side
   }
 
 data AISimulatorState = AISimulatorState
@@ -138,7 +142,11 @@ defaultBattleScreenState =
       battleBgIndex = 0,
       battleIsMultiplayer = False,
       battlePendingLocalAction = Nothing,
-      battlePendingRemoteAction = Nothing
+      battlePendingRemoteAction = Nothing,
+      battlePendingFrames = [],
+      battleFrameTimer = 0.0,
+      battleShakeTimer = 0.0,
+      battleShakeTarget = Nothing
     }
 
 defaultMultiplayerState :: MultiplayerState

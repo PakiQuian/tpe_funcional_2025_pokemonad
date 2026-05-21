@@ -47,9 +47,10 @@ import Pokemonad.Battle.State
     BattlePhase (..),
     BattleState (..),
     flipBattleState,
+    flipBattleStep,
     initBattleFromTeams,
   )
-import Pokemonad.Battle.Turn (executeTurnMulti)
+import Pokemonad.Battle.Turn (BattleStep, executeTurnMulti)
 import Pokemonad.Core.Trainer (Trainer)
 import Pokemonad.Core.Types (PokemonId (..), TrainerId (..))
 import System.Random (StdGen)
@@ -175,9 +176,24 @@ applyNetMsg (AppMsgBattleState bs) gs =
             battleIsMultiplayer = True,
             battleMenuType = menuType,
             battlePendingLocalAction = Nothing,
-            battlePendingRemoteAction = Nothing
+            battlePendingRemoteAction = Nothing,
+            battlePendingFrames = [],
+            battleFrameTimer = 0,
+            battleShakeTimer = 0,
+            battleShakeTarget = Nothing
           }
    in gs {currentScreen = BattleScreen, battleScreenState = bss}
+applyNetMsg (AppMsgBattleFrames bs) gs =
+  let frames = decode (BL.fromStrict bs) :: [BattleStep]
+      bss0 = battleScreenState gs
+      bss =
+        bss0
+          { battlePendingFrames = frames,
+            battleFrameTimer = 0.6,
+            battlePendingLocalAction = Nothing,
+            battlePendingRemoteAction = Nothing
+          }
+   in gs {battleScreenState = bss}
 applyNetMsg AppMsgDisconnect gs =
   let ms = multiplayerState gs
    in gs
@@ -297,31 +313,24 @@ executeMPTurn ::
   BattleAction ->
   IO World
 executeMPTurn w gs bss battleSt localAction remoteAction = do
-  let rng = randomGen gs
-      (newBattle, newRng) = executeTurnMulti rng battleSt localAction remoteAction
-      flipped = flipBattleState newBattle
-      encoded = BL.toStrict (encode flipped)
+  let rng                = randomGen gs
+      (frames, newRng)   = executeTurnMulti rng battleSt localAction remoteAction
+      framesForPeer      = map flipBattleStep frames
+      encoded            = BL.toStrict (encode framesForPeer)
   case netSocket w of
-    Just sock -> sendMsg sock (AppMsgBattleState encoded)
+    Just sock -> sendMsg sock (AppMsgBattleFrames encoded)
     Nothing -> pure ()
-  let nextMenuType = case phase newBattle of
-        WaitingForForcedPlayerSwitch -> PokemonMenu
-        _ -> MainBattleMenu
-      newBss =
+  let newBss =
         bss
-          { currentBattle = Just newBattle,
-            battleMenuType = nextMenuType,
+          { battlePendingFrames = frames,
+            battleFrameTimer = 0.6,
             battlePendingLocalAction = Nothing,
             battlePendingRemoteAction = Nothing
           }
-      nextScreen = case phase newBattle of
-        BattleEnded _ -> BattleResultScreen
-        _ -> BattleScreen
       newGs =
         gs
           { battleScreenState = newBss,
-            randomGen = newRng,
-            currentScreen = nextScreen
+            randomGen = newRng
           }
   pure w {worldGame = newGs}
 

@@ -38,6 +38,7 @@ instance Binary AppMsg where
     AppMsgAction action -> putWord8 3 >> put action
     AppMsgBattleState bs -> putWord8 4 >> put bs
     AppMsgDisconnect -> putWord8 5
+    AppMsgBattleFrames bs -> putWord8 6 >> put bs
   get = do
     tag <- getWord8
     case tag of
@@ -47,6 +48,7 @@ instance Binary AppMsg where
       3 -> AppMsgAction <$> get
       4 -> AppMsgBattleState <$> get
       5 -> pure AppMsgDisconnect
+      6 -> AppMsgBattleFrames <$> get
       _ -> fail "P2P.Serialization: unknown AppMsg tag"
 
 maxFramedPayloadBytes :: Int

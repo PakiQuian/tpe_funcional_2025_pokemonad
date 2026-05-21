@@ -25,6 +25,7 @@ import Client.State
   )
 import Client.Types
   ( Assets (..),
+    BattleMenuType (..),
     BattleScreenState (..),
     MultiplayerState (..),
     NetSubState (..),
@@ -42,8 +43,14 @@ import Graphics.Gloss.Interface.Pure.Game
   )
 import P2P.Communication (sendMsg)
 import P2P.Types (AppMsg (..), PlayerAction (..))
-import Pokemonad.Battle.State (BattleAction (..))
-import Pokemonad.Core.Types (PokemonId (..))
+import Pokemonad.Battle.State
+  ( BattleAction (..),
+    BattlePhase (..),
+    BattlePokemon (..),
+    BattleState (..),
+    Side (..),
+  )
+import Pokemonad.Core.Types (HP (..), PokemonId (..))
 
 -- ---------------------------------------------------------------------------
 -- World-level IO entry points
@@ -151,6 +158,87 @@ handleGameInput ev gs = case ev of
 
 handleTick :: Float -> AppState -> AppState
 handleTick dt gs =
+  let bs = battleScreenState gs
+      onBattle = currentScreen gs == BattleScreen
+   in if onBattle && BattleHandler.isAnimating bs
+        then advanceBattleFrames dt gs
+        else advanceShake dt (handleScroll dt gs)
+
+-- | While a turn animation is in flight, advance the frame timer and pop the
+--   next frame whenever the spacing threshold is crossed. Other input is
+--   gated off (see BattleHandler.handle*).
+advanceBattleFrames :: Float -> AppState -> AppState
+advanceBattleFrames dt gs =
+  let bs        = battleScreenState gs
+      newTimer  = battleFrameTimer bs + dt
+      threshold = BattleHandler.animationFrameSpacing
+   in if newTimer < threshold
+        then gs {battleScreenState = decayShake dt (bs {battleFrameTimer = newTimer})}
+        else popFrame (newTimer - threshold) gs
+
+-- | Apply the next frame in the queue: update currentBattle, set shake target
+--   for any side that lost HP, and \(when the queue empties\) restore the
+--   appropriate menu type / transition to the result screen.
+popFrame :: Float -> AppState -> AppState
+popFrame leftover gs =
+  let bs = battleScreenState gs
+   in case battlePendingFrames bs of
+        [] -> gs
+        ((frameState, _frameLogs) : rest) ->
+          let prev               = currentBattle bs
+              shakeSide          = damagedSide prev frameState
+              queueEmptyAfter    = null rest
+              endingMenuType
+                | not queueEmptyAfter = battleMenuType bs
+                | phase frameState == WaitingForForcedPlayerSwitch = PokemonMenu
+                | otherwise = MainBattleMenu
+              endingBenchCursor
+                | queueEmptyAfter && phase frameState == WaitingForForcedPlayerSwitch =
+                    BattleHandler.firstSwitchableBenchIndexFromBattle frameState
+                | otherwise = battleBenchCursor bs
+              endingScreen
+                | not queueEmptyAfter = currentScreen gs
+                | otherwise = case phase frameState of
+                    BattleEnded _ -> BattleResultScreen
+                    _ -> BattleScreen
+              bs' =
+                bs
+                  { currentBattle       = Just frameState,
+                    battlePendingFrames = rest,
+                    battleFrameTimer    = leftover,
+                    battleShakeTimer    = maybe 0 (const BattleHandler.animationShakeDuration) shakeSide,
+                    battleShakeTarget   = shakeSide,
+                    battleMenuType      = endingMenuType,
+                    battleBenchCursor   = endingBenchCursor,
+                    battleMoveCursor    = if queueEmptyAfter then 0 else battleMoveCursor bs
+                  }
+           in gs {battleScreenState = bs', currentScreen = endingScreen}
+
+-- | Detect which side took damage between two consecutive frames, if any.
+damagedSide :: Maybe BattleState -> BattleState -> Maybe Side
+damagedSide Nothing _ = Nothing
+damagedSide (Just prev) next
+  | hp playerActive next < hp playerActive prev = Just PlayerSide
+  | hp enemyActive  next < hp enemyActive  prev = Just EnemySide
+  | otherwise = Nothing
+  where
+    hp accessor st = unHP (battlePokemonHp (accessor st))
+
+-- | Decay the shake timer; clear the target when it elapses.
+advanceShake :: Float -> AppState -> AppState
+advanceShake dt gs = gs {battleScreenState = decayShake dt (battleScreenState gs)}
+
+decayShake :: Float -> BattleScreenState -> BattleScreenState
+decayShake dt bs =
+  let nextTimer = max 0 (battleShakeTimer bs - dt)
+   in bs
+        { battleShakeTimer = nextTimer,
+          battleShakeTarget = if nextTimer <= 0 then Nothing else battleShakeTarget bs
+        }
+
+-- | Continuous up/down scroll handling (menu navigation).
+handleScroll :: Float -> AppState -> AppState
+handleScroll dt gs =
   let scrollSpeed = 0.05
       newTimer = scrollTimer gs + dt
    in if holdingUp gs && newTimer >= scrollSpeed

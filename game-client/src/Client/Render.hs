@@ -77,6 +77,8 @@ drawGame gs netSt =
             (battleMenuType bss)
             (battleMoveCursor bss)
             (battleBenchCursor bss)
+            (battleShakeTarget bss)
+            (battleShakeTimer bss)
         BattleResultScreen ->
           case currentBattle bss of
             Just bState ->

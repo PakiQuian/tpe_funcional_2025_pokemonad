@@ -5,6 +5,7 @@ module Client.Handlers.BattleHandler
     handleRight,
     handleEnter,
     handleBack,
+    isAnimating,
     isForcedSwitchPhase,
     isForcedEnemySwitchPhase,
     firstSwitchableBenchIndex,
@@ -13,6 +14,8 @@ module Client.Handlers.BattleHandler
     previousSwitchableBenchIndex,
     nextBattleMenuType,
     battleResultScreenFrom,
+    animationFrameSpacing,
+    animationShakeDuration,
   )
 where
 
@@ -33,63 +36,81 @@ import Pokemonad.Battle.Turn (submitPlayerActionWithEnemyWeights)
 import Pokemonad.Core.Types (Status (..))
 import System.Random (StdGen)
 
+-- | Seconds between frame pops in the per-step turn animation.
+animationFrameSpacing :: Float
+animationFrameSpacing = 0.6
+
+-- | Seconds the defender sprite shakes after taking damage in a frame.
+animationShakeDuration :: Float
+animationShakeDuration = 0.25
+
 -- ---------------------------------------------------------------------------
 -- Directional handlers
 -- ---------------------------------------------------------------------------
 
 handleUp :: BattleScreenState -> BattleScreenState
-handleUp s =
-  if isForcedSwitchPhase s
-    then case battleMenuType s of
-      PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
-      _ -> s
-    else case battleMenuType s of
-      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = if c >= 2 then c - 2 else c}
-      FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if c >= 2 then c - 2 else c}
-      PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
-      _ -> s
+handleUp s
+  | isAnimating s = s
+  | isForcedSwitchPhase s =
+      case battleMenuType s of
+        PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
+        _ -> s
+  | otherwise =
+      case battleMenuType s of
+        FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if c >= 2 then c - 2 else c}
+        PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
+        _ -> s
 
 handleDown :: BattleScreenState -> BattleScreenState
-handleDown s =
-  if isForcedSwitchPhase s
-    then case battleMenuType s of
-      PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
-      _ -> s
-    else case battleMenuType s of
-      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = if c <= 1 then c + 2 else c}
-      FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if c <= 1 then c + 2 else c}
-      PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
-      _ -> s
+handleDown s
+  | isAnimating s = s
+  | isForcedSwitchPhase s =
+      case battleMenuType s of
+        PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
+        _ -> s
+  | otherwise =
+      case battleMenuType s of
+        FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if c <= 1 then c + 2 else c}
+        PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
+        _ -> s
 
 handleLeft :: BattleScreenState -> BattleScreenState
-handleLeft s =
+handleLeft s
+  | isAnimating s = s
+  | otherwise = handleLeft' s
+
+handleLeft' :: BattleScreenState -> BattleScreenState
+handleLeft' s =
   if isForcedSwitchPhase s
     then case battleMenuType s of
       PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
       SwitchConfirmMenu -> s {battleMoveCursor = 0}
       _ -> s
     else case battleMenuType s of
-      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = if odd c then c - 1 else c}
+      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = max 0 (c - 1)}
       FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if odd c then c - 1 else c}
       PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
       SwitchConfirmMenu -> s {battleMoveCursor = 0}
       QuitConfirmMenu -> s {battleMoveCursor = 0}
-      _ -> s
 
 handleRight :: BattleScreenState -> BattleScreenState
-handleRight s =
+handleRight s
+  | isAnimating s = s
+  | otherwise = handleRight' s
+
+handleRight' :: BattleScreenState -> BattleScreenState
+handleRight' s =
   if isForcedSwitchPhase s
     then case battleMenuType s of
       PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
       SwitchConfirmMenu -> s {battleMoveCursor = 1}
       _ -> s
     else case battleMenuType s of
-      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = if even c then c + 1 else c}
+      MainBattleMenu -> let c = battleMainCursor s in s {battleMainCursor = min 2 (c + 1)}
       FightMenu -> let c = battleMoveCursor s in s {battleMoveCursor = if even c then c + 1 else c}
       PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
       SwitchConfirmMenu -> s {battleMoveCursor = 1}
       QuitConfirmMenu -> s {battleMoveCursor = 1}
-      _ -> s
 
 -- ---------------------------------------------------------------------------
 -- Enter handler
@@ -102,6 +123,7 @@ handleEnter ::
   StdGen ->
   (BattleScreenState, StdGen, Maybe Screen)
 handleEnter isMP s weights gen
+  | isAnimating s = (s, gen, Nothing)
   | isForcedEnemySwitchPhase s = (s, gen, Nothing)
   | isForcedSwitchPhase s = case battleMenuType s of
       PokemonMenu ->
@@ -132,14 +154,13 @@ handleEnter isMP s weights gen
       MainBattleMenu ->
         case battleMainCursor s of
           0 -> (s {battleMenuType = FightMenu, battleMoveCursor = 0}, gen, Nothing)
-          2 -> (s {battleMenuType = PokemonMenu, battleBenchCursor = firstSwitchableBenchIndex s}, gen, Nothing)
-          3 -> (s {battleMenuType = QuitConfirmMenu, battleMoveCursor = 1}, gen, Nothing)
+          1 -> (s {battleMenuType = PokemonMenu, battleBenchCursor = firstSwitchableBenchIndex s}, gen, Nothing)
+          2 -> (s {battleMenuType = QuitConfirmMenu, battleMoveCursor = 1}, gen, Nothing)
           _ -> (s, gen, Nothing)
       FightMenu ->
         if isMP
           then storeLocalAction s gen (ActionMove (battleMoveCursor s))
           else submitSelectedMove s weights gen
-      BagMenu -> (s, gen, Nothing)
       PokemonMenu ->
         case currentBattle s of
           Just bState ->
@@ -182,14 +203,18 @@ storeLocalAction s gen action =
 -- ---------------------------------------------------------------------------
 
 handleBack :: BattleScreenState -> BattleScreenState
-handleBack s =
+handleBack s
+  | isAnimating s = s
+  | otherwise = handleBack' s
+
+handleBack' :: BattleScreenState -> BattleScreenState
+handleBack' s =
   if isForcedSwitchPhase s
     then case battleMenuType s of
       SwitchConfirmMenu -> s {battleMenuType = PokemonMenu, battleMoveCursor = 0}
       _ -> s
     else case battleMenuType s of
       FightMenu -> s {battleMenuType = MainBattleMenu}
-      BagMenu -> s {battleMenuType = MainBattleMenu}
       PokemonMenu -> s {battleMenuType = MainBattleMenu}
       SwitchConfirmMenu -> s {battleMenuType = PokemonMenu, battleMoveCursor = 0}
       QuitConfirmMenu -> s {battleMenuType = MainBattleMenu}
@@ -199,57 +224,45 @@ handleBack s =
 -- Move / switch submission (single-player)
 -- ---------------------------------------------------------------------------
 
+-- | True while the battle is in the middle of replaying turn frames; menu
+--   input is ignored during this window.
+isAnimating :: BattleScreenState -> Bool
+isAnimating s = not (null (battlePendingFrames s))
+
+-- | Queue a player's action for animated replay. The pre-turn state stays in
+--   `currentBattle` until the first frame is popped by the tick handler.
+queuePlayerAction ::
+  BattleScreenState ->
+  Maybe QWeights ->
+  StdGen ->
+  BattleAction ->
+  (BattleScreenState, StdGen, Maybe Screen)
+queuePlayerAction s weights gen action =
+  case currentBattle s of
+    Nothing -> (s, gen, Nothing)
+    Just bState ->
+      let (frames, nextRng) = submitPlayerActionWithEnemyWeights weights gen bState action
+          newState =
+            s
+              { battlePendingFrames = frames,
+                battleFrameTimer = animationFrameSpacing,
+                battleMoveCursor = 0
+              }
+       in (newState, nextRng, Nothing)
+
 submitSelectedMove ::
   BattleScreenState ->
   Maybe QWeights ->
   StdGen ->
   (BattleScreenState, StdGen, Maybe Screen)
-submitSelectedMove s weights gen =
-  case currentBattle s of
-    Nothing -> (s, gen, Nothing)
-    Just bState ->
-      let action = ActionMove (battleMoveCursor s)
-          (nextBattle, nextRng) = submitPlayerActionWithEnemyWeights weights gen bState action
-          nextScreen = battleResultScreenFrom nextBattle
-          nextMenuType = nextBattleMenuType nextBattle
-          nextBenchCursor = firstSwitchableBenchIndexFromBattle nextBattle
-          newState =
-            s
-              { currentBattle = Just nextBattle,
-                battleMoveCursor = 0,
-                battleBenchCursor = nextBenchCursor,
-                battleMenuType = nextMenuType
-              }
-       in ( newState,
-            nextRng,
-            if nextScreen == BattleScreen then Nothing else Just nextScreen
-          )
+submitSelectedMove s weights gen = queuePlayerAction s weights gen (ActionMove (battleMoveCursor s))
 
 submitSelectedSwitch ::
   BattleScreenState ->
   Maybe QWeights ->
   StdGen ->
   (BattleScreenState, StdGen, Maybe Screen)
-submitSelectedSwitch s weights gen =
-  case currentBattle s of
-    Nothing -> (s, gen, Nothing)
-    Just bState ->
-      let action = ActionSwitch (battleBenchCursor s)
-          (nextBattle, nextRng) = submitPlayerActionWithEnemyWeights weights gen bState action
-          nextScreen = battleResultScreenFrom nextBattle
-          nextMenuType = nextBattleMenuType nextBattle
-          nextBenchCursor = firstSwitchableBenchIndexFromBattle nextBattle
-          newState =
-            s
-              { currentBattle = Just nextBattle,
-                battleMoveCursor = 0,
-                battleBenchCursor = nextBenchCursor,
-                battleMenuType = nextMenuType
-              }
-       in ( newState,
-            nextRng,
-            if nextScreen == BattleScreen then Nothing else Just nextScreen
-          )
+submitSelectedSwitch s weights gen = queuePlayerAction s weights gen (ActionSwitch (battleBenchCursor s))
 
 -- ---------------------------------------------------------------------------
 -- Predicates / helpers

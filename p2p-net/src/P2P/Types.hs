@@ -33,5 +33,6 @@ data AppMsg
   | AppMsgBattleReady
   | AppMsgAction PlayerAction
   | AppMsgBattleState ByteString
+  | AppMsgBattleFrames ByteString
   | AppMsgDisconnect
   deriving (Eq, Show)
