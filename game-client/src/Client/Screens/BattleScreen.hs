@@ -34,8 +34,8 @@ import Pokemonad.Core.Move (Move (..))
 import Pokemonad.Core.Pokemon (Pokemon (..))
 import Pokemonad.Core.Types (HP (..), PokemonId (..))
 
-drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map PokemonId Picture -> Map.Map PokemonId Picture -> Int -> BattleMenuType -> Int -> Int -> Maybe Side -> Float -> Picture
-drawBattleScreen backgrounds bgIndex maybeState pokeFrontSprites pokeBackSprites menuIndex menuType moveIndex benchIndex shakeTarget shakeTimer =
+drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map PokemonId Picture -> Map.Map PokemonId Picture -> Int -> BattleMenuType -> Int -> Int -> Maybe Side -> Float -> Bool -> Picture
+drawBattleScreen backgrounds bgIndex maybeState pokeFrontSprites pokeBackSprites menuIndex menuType moveIndex benchIndex shakeTarget shakeTimer waitingForOpponent =
   let bg = if null backgrounds then blank else backgrounds !! (bgIndex `mod` length backgrounds)
       enemyOffset  = shakeOffsetFor EnemySide  shakeTarget shakeTimer
       playerOffset = shakeOffsetFor PlayerSide shakeTarget shakeTimer
@@ -47,8 +47,20 @@ drawBattleScreen backgrounds bgIndex maybeState pokeFrontSprites pokeBackSprites
               drawEnemyUnit (enemyActive state) pokeFrontSprites enemyOffset,
               drawPlayerUnit (playerActive state) pokeBackSprites playerOffset,
               drawBattleLogWindow (battleLog state),
-              drawBattleMenu (phase state) (playerActive state) (playerBench state) menuIndex menuType moveIndex benchIndex
+              if waitingForOpponent
+                then drawWaitingForOpponent
+                else drawBattleMenu (phase state) (playerActive state) (playerBench state) menuIndex menuType moveIndex benchIndex
             ]
+
+-- | Replaces the action menu while we're waiting on the opponent in MP.
+drawWaitingForOpponent :: Picture
+drawWaitingForOpponent =
+  translate 0 (-280) $
+    pictures
+      [ color overlayDarkColor $ rectangleSolid 1280 160,
+        color white $ rectangleWire 1270 150,
+        translate (-340) (-10) $ scale 0.3 0.3 $ color white $ text "Waiting for opponent..."
+      ]
 
 -- | Horizontal pixel offset for a sprite when its side is the shake target.
 --   The offset oscillates and decays to 0 as the timer reaches 0.

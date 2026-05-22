@@ -62,9 +62,9 @@ handleWorldInput ev w = do
   w1 <- AISimulatorHandler.launchAITrainingIfRequested ev w
   let g1 = handleGameInput ev (worldGame w1)
       leftMP =
-        currentScreen g0 == Multiplayer
-          && currentScreen g1 /= Multiplayer
-          && currentScreen g1 /= TeamSelect
+        netSubState w /= NetDisconnected
+          && currentScreen g1 == Menu
+          && currentScreen g0 `elem` [Multiplayer, TeamSelect, OpponentSelect, BattleScreen, BattleResultScreen]
   w2 <- if leftMP then disconnectNetWorld w1 else pure w1
 
   -- Intercept TeamSelect → OpponentSelect when in multiplayer lobby

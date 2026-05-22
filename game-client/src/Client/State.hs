@@ -33,9 +33,10 @@ import Client.Types
 import Control.Concurrent.STM (STM, atomically, readTVar, writeTVar)
 import Control.Concurrent.STM.TQueue (TQueue, tryReadTQueue)
 import Control.Concurrent.STM.TVar (TVar)
+import Control.Exception (SomeException, try)
 import Data.Binary (decode, encode)
-import Data.List (foldl')
 import qualified Data.ByteString.Lazy as BL
+import Data.List (foldl')
 import qualified Data.Map as Map
 import Graphics.Gloss (Picture)
 import Network.Socket (Socket, close)
@@ -313,10 +314,10 @@ executeMPTurn ::
   BattleAction ->
   IO World
 executeMPTurn w gs bss battleSt localAction remoteAction = do
-  let rng                = randomGen gs
-      (frames, newRng)   = executeTurnMulti rng battleSt localAction remoteAction
-      framesForPeer      = map flipBattleStep frames
-      encoded            = BL.toStrict (encode framesForPeer)
+  let rng = randomGen gs
+      (frames, newRng) = executeTurnMulti rng battleSt localAction remoteAction
+      framesForPeer = map flipBattleStep frames
+      encoded = BL.toStrict (encode framesForPeer)
   case netSocket w of
     Just sock -> sendMsg sock (AppMsgBattleFrames encoded)
     Nothing -> pure ()
@@ -338,6 +339,7 @@ disconnectNetWorld :: World -> IO World
 disconnectNetWorld w =
   case netSocket w of
     Just sock -> do
+      _ <- try (sendMsg sock AppMsgDisconnect) :: IO (Either SomeException ())
       close sock
       pure w {netSocket = Nothing, netSubState = NetDisconnected, netIsHost = False}
     Nothing -> pure w {netSubState = NetDisconnected, netIsHost = False}

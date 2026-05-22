@@ -6,6 +6,7 @@ module Client.Handlers.BattleHandler
     handleEnter,
     handleBack,
     isAnimating,
+    isWaitingForOpponent,
     isForcedSwitchPhase,
     isForcedEnemySwitchPhase,
     firstSwitchableBenchIndex,
@@ -25,6 +26,7 @@ import Client.Types
     Screen (..),
     defaultBattleScreenState,
   )
+import Data.Maybe (isJust)
 import Pokemonad.AI.Model (QWeights)
 import Pokemonad.Battle.State
   ( BattleAction (..),
@@ -35,6 +37,15 @@ import Pokemonad.Battle.State
 import Pokemonad.Battle.Turn (submitPlayerActionWithEnemyWeights)
 import Pokemonad.Core.Types (Status (..))
 import System.Random (StdGen)
+
+-- | True in multiplayer between the moment the user submits their action and
+--   the moment the resulting frames arrive. Menu input is locked during this
+--   window so the player can't accidentally re-submit a different action.
+isWaitingForOpponent :: BattleScreenState -> Bool
+isWaitingForOpponent s =
+  battleIsMultiplayer s
+    && isJust (battlePendingLocalAction s)
+    && null (battlePendingFrames s)
 
 -- | Seconds between frame pops in the per-step turn animation.
 animationFrameSpacing :: Float
@@ -51,6 +62,7 @@ animationShakeDuration = 0.25
 handleUp :: BattleScreenState -> BattleScreenState
 handleUp s
   | isAnimating s = s
+  | isWaitingForOpponent s = s
   | isForcedSwitchPhase s =
       case battleMenuType s of
         PokemonMenu -> s {battleBenchCursor = previousSwitchableBenchIndex s (battleBenchCursor s)}
@@ -64,6 +76,7 @@ handleUp s
 handleDown :: BattleScreenState -> BattleScreenState
 handleDown s
   | isAnimating s = s
+  | isWaitingForOpponent s = s
   | isForcedSwitchPhase s =
       case battleMenuType s of
         PokemonMenu -> s {battleBenchCursor = nextSwitchableBenchIndex s (battleBenchCursor s)}
@@ -77,6 +90,7 @@ handleDown s
 handleLeft :: BattleScreenState -> BattleScreenState
 handleLeft s
   | isAnimating s = s
+  | isWaitingForOpponent s = s
   | otherwise = handleLeft' s
 
 handleLeft' :: BattleScreenState -> BattleScreenState
@@ -96,6 +110,7 @@ handleLeft' s =
 handleRight :: BattleScreenState -> BattleScreenState
 handleRight s
   | isAnimating s = s
+  | isWaitingForOpponent s = s
   | otherwise = handleRight' s
 
 handleRight' :: BattleScreenState -> BattleScreenState
@@ -124,6 +139,7 @@ handleEnter ::
   (BattleScreenState, StdGen, Maybe Screen)
 handleEnter isMP s weights gen
   | isAnimating s = (s, gen, Nothing)
+  | isWaitingForOpponent s = (s, gen, Nothing)
   | isForcedEnemySwitchPhase s = (s, gen, Nothing)
   | isForcedSwitchPhase s = case battleMenuType s of
       PokemonMenu ->
@@ -205,6 +221,7 @@ storeLocalAction s gen action =
 handleBack :: BattleScreenState -> BattleScreenState
 handleBack s
   | isAnimating s = s
+  | isWaitingForOpponent s = s
   | otherwise = handleBack' s
 
 handleBack' :: BattleScreenState -> BattleScreenState

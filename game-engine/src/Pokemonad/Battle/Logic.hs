@@ -65,6 +65,7 @@ continuePlayerCheck bState logs
       case firstAliveIndex (playerBench bState) of
         Just _ -> (bState {phase = WaitingForForcedPlayerSwitch}, logs ++ ["Choose a replacement Pokemon."])
         Nothing -> (bState {phase = BattleEnded EnemyWon}, logs ++ ["You have no Pokemon left!"])
+  | phase bState == WaitingForForcedEnemySwitch = (bState, logs)
   | phase bState == BattleEnded PlayerWon = (bState, logs)
   | otherwise = (bState {phase = WaitingForCommand}, logs)
 
