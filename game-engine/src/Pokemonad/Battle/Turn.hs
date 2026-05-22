@@ -48,26 +48,26 @@ finalStateOf fallback (steps, rng) =
 --   a log of what happened, and the next RNG.
 applyAction :: Side -> StdGen -> BattleState -> BattleAction -> (BattleState, [String], StdGen)
 applyAction side rng bState action =
-  let activePoke   = getActive side bState
+  let activePoke = getActive side bState
       opponentSide = oppositeSide side
       opponentPoke = getActive opponentSide bState
    in case action of
         ActionMove moveIdx ->
-          let moves           = battlePokemonMoves activePoke
-              selectedMove    = if moveIdx < length moves then moves !! moveIdx else head moves
-              attackerName    = pokemonName (battlePokemonBase activePoke)
-              defenderName    = pokemonName (battlePokemonBase opponentPoke)
-              canMove         = canAttack (battlePokemonStatus activePoke)
-              (hits, rng')    = doesMoveHit rng (moveAccuracy selectedMove)
-              atkStat         = getAttackStat selectedMove (pokemonStats (battlePokemonBase activePoke))
-              defStat         = getDefenseStat selectedMove (pokemonStats (battlePokemonBase opponentPoke))
-              defType         = head (pokemonTypes (battlePokemonBase opponentPoke))
-              damage          = resolveDamage (battlePokemonLevel activePoke) atkStat defStat selectedMove defType
-              newOpponentHp   = HP (unHP (battlePokemonHp opponentPoke) - unHP damage)
+          let moves = battlePokemonMoves activePoke
+              selectedMove = if moveIdx < length moves then moves !! moveIdx else head moves
+              attackerName = pokemonName (battlePokemonBase activePoke)
+              defenderName = pokemonName (battlePokemonBase opponentPoke)
+              canMove = canAttack (battlePokemonStatus activePoke)
+              (hits, rng') = doesMoveHit rng (moveAccuracy selectedMove)
+              atkStat = getAttackStat selectedMove (pokemonStats (battlePokemonBase activePoke))
+              defStat = getDefenseStat selectedMove (pokemonStats (battlePokemonBase opponentPoke))
+              defType = head (pokemonTypes (battlePokemonBase opponentPoke))
+              damage = resolveDamage (battlePokemonLevel activePoke) atkStat defStat selectedMove defType
+              newOpponentHp = HP (unHP (battlePokemonHp opponentPoke) - unHP damage)
               updatedOpponent = updatePokemonAfterDamage opponentPoke newOpponentHp
-              hitLog          = attackerName ++ " uses " ++ moveName selectedMove ++ "! It does " ++ show (unHP damage) ++ " damage!"
-              faintLog        = [defenderName ++ " fainted!" | unHP newOpponentHp <= 0]
-              newState        = setActive opponentSide updatedOpponent bState
+              hitLog = attackerName ++ " uses " ++ moveName selectedMove ++ "! It does " ++ show (unHP damage) ++ " damage!"
+              faintLog = [defenderName ++ " fainted!" | unHP newOpponentHp <= 0]
+              newState = setActive opponentSide updatedOpponent bState
            in if not canMove
                 then (bState, [attackerName ++ " can't move!"], rng)
                 else
@@ -110,23 +110,23 @@ executeTurnFrames ::
   BattleAction ->
   ([BattleStep], StdGen)
 executeTurnFrames resolver rng bState playerAction enemyAction =
-  let baseLog              = battleLog bState
-      newTurnCount         = turnCount bState + 1
+  let baseLog = battleLog bState
+      newTurnCount = turnCount bState + 1
       (s1, l1, s2, l2, rngFinal) = applyBothActionsTraced rng bState playerAction enemyAction
       (resolved, postLogs) = resolver s2
 
-      step1 = mkFrame newTurnCount s1       (baseLog ++ l1)              l1
-      step2 = mkFrame newTurnCount s2       (baseLog ++ l1 ++ l2)        l2
+      step1 = mkFrame newTurnCount s1 (baseLog ++ l1) l1
+      step2 = mkFrame newTurnCount s2 (baseLog ++ l1 ++ l2) l2
       step3 = mkFrame newTurnCount resolved (baseLog ++ l1 ++ l2 ++ postLogs) postLogs
 
       secondActionFired = not (null l2)
-      phaseChanged      = phase resolved /= phase s2
-      keepStep3         = not (null postLogs) || phaseChanged
+      phaseChanged = phase resolved /= phase s2
+      keepStep3 = not (null postLogs) || phaseChanged
 
       frames =
         step1
           : ([step2 | secondActionFired])
-            ++ ([step3 | keepStep3])
+          ++ ([step3 | keepStep3])
    in (frames, rngFinal)
 
 mkFrame :: Int -> BattleState -> [String] -> [String] -> BattleStep
@@ -153,25 +153,25 @@ applyBothActionsTraced rng bState playerAction enemyAction
           (s2, l2, r2) = if enemyFainted then (s1, [], r1) else applyAction EnemySide r1 s1 enemyAction
        in (s1, l1, s2, l2, r2)
   | enemyDidSwitch =
-      let (s1, l1, r1)  = applyAction EnemySide rng bState enemyAction
+      let (s1, l1, r1) = applyAction EnemySide rng bState enemyAction
           playerFainted = unHP (battlePokemonHp (playerActive s1)) <= 0
-          (s2, l2, r2)  = if playerFainted then (s1, [], r1) else applyAction PlayerSide r1 s1 playerAction
+          (s2, l2, r2) = if playerFainted then (s1, [], r1) else applyAction PlayerSide r1 s1 playerAction
        in (s1, l1, s2, l2, r2)
   | otherwise =
       let playerSpeed = statsSpeed (pokemonStats (battlePokemonBase (playerActive bState)))
-          enemySpeed  = statsSpeed (pokemonStats (battlePokemonBase (enemyActive bState)))
+          enemySpeed = statsSpeed (pokemonStats (battlePokemonBase (enemyActive bState)))
           playerFirst = playerSpeed > enemySpeed
           (firstSide, firstAction, secondSide, secondAction) =
             if playerFirst
               then (PlayerSide, playerAction, EnemySide, enemyAction)
               else (EnemySide, enemyAction, PlayerSide, playerAction)
-          (s1, l1, r1)    = applyAction firstSide rng bState firstAction
+          (s1, l1, r1) = applyAction firstSide rng bState firstAction
           defenderFainted = unHP (battlePokemonHp (getActive secondSide s1)) <= 0
-          (s2, l2, r2)    = if defenderFainted then (s1, [], r1) else applyAction secondSide r1 s1 secondAction
+          (s2, l2, r2) = if defenderFainted then (s1, [], r1) else applyAction secondSide r1 s1 secondAction
        in (s1, l1, s2, l2, r2)
   where
     playerDidSwitch = isSwitchAction playerAction
-    enemyDidSwitch  = isSwitchAction enemyAction
+    enemyDidSwitch = isSwitchAction enemyAction
 
 -- | One-frame sequence for the player's forced switch.
 forcedPlayerSwitchFrames :: StdGen -> BattleState -> BattleAction -> ([BattleStep], StdGen)
@@ -180,11 +180,11 @@ forcedPlayerSwitchFrames rng bState playerAction =
     ActionSwitch _ ->
       let (switched, switchLogs, rng1) = applyAction PlayerSide rng bState playerAction
           stillFainted = unHP (battlePokemonHp (playerActive switched)) <= 0
-          phaseAfter   = if stillFainted then WaitingForForcedPlayerSwitch else WaitingForCommand
-          frameState   = switched {phase = phaseAfter, battleLog = battleLog switched ++ switchLogs}
+          phaseAfter = if stillFainted then WaitingForForcedPlayerSwitch else WaitingForCommand
+          frameState = switched {phase = phaseAfter, battleLog = battleLog switched ++ switchLogs}
        in ([(frameState, switchLogs)], rng1)
     _ ->
-      let msg        = "You must switch Pokemon before continuing."
+      let msg = "You must switch Pokemon before continuing."
           frameState = bState {battleLog = battleLog bState ++ [msg]}
        in ([(frameState, [msg])], rng)
 
@@ -195,11 +195,11 @@ forcedEnemySwitchFrames rng bState enemyAction =
     ActionSwitch _ ->
       let (switched, switchLogs, rng1) = applyAction EnemySide rng bState enemyAction
           stillFainted = unHP (battlePokemonHp (enemyActive switched)) <= 0
-          phaseAfter   = if stillFainted then WaitingForForcedEnemySwitch else WaitingForCommand
-          frameState   = switched {phase = phaseAfter, battleLog = battleLog switched ++ switchLogs}
+          phaseAfter = if stillFainted then WaitingForForcedEnemySwitch else WaitingForCommand
+          frameState = switched {phase = phaseAfter, battleLog = battleLog switched ++ switchLogs}
        in ([(frameState, switchLogs)], rng1)
     _ ->
-      let msg        = "Waiting for opponent to switch."
+      let msg = "Waiting for opponent to switch."
           frameState = bState {battleLog = battleLog bState ++ [msg]}
        in ([(frameState, [msg])], rng)
 
@@ -213,7 +213,7 @@ submitPlayerActionWithEnemyWeights maybeWeights rng bState playerAction =
           let (enemyAction, rng1) = chooseEnemyActionWithMaybeWeights rng (enemyDifficulty bState) maybeWeights bState
            in executeTurn rng1 bState playerAction enemyAction
         _ ->
-          let msg        = "You must switch Pokemon before selecting another action."
+          let msg = "You must switch Pokemon before selecting another action."
               frameState = bState {battleLog = battleLog bState ++ [msg]}
            in ([(frameState, [msg])], rng)
     _ ->

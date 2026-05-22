@@ -169,8 +169,8 @@ handleTick dt gs =
 --   gated off (see BattleHandler.handle*).
 advanceBattleFrames :: Float -> AppState -> AppState
 advanceBattleFrames dt gs =
-  let bs        = battleScreenState gs
-      newTimer  = battleFrameTimer bs + dt
+  let bs = battleScreenState gs
+      newTimer = battleFrameTimer bs + dt
       threshold = BattleHandler.animationFrameSpacing
    in if newTimer < threshold
         then gs {battleScreenState = decayShake dt (bs {battleFrameTimer = newTimer})}
@@ -185,9 +185,9 @@ popFrame leftover gs =
    in case battlePendingFrames bs of
         [] -> gs
         ((frameState, _frameLogs) : rest) ->
-          let prev               = currentBattle bs
-              shakeSide          = damagedSide prev frameState
-              queueEmptyAfter    = null rest
+          let prev = currentBattle bs
+              shakeSide = damagedSide prev frameState
+              queueEmptyAfter = null rest
               endingMenuType
                 | not queueEmptyAfter = battleMenuType bs
                 | phase frameState == WaitingForForcedPlayerSwitch = PokemonMenu
@@ -203,14 +203,14 @@ popFrame leftover gs =
                     _ -> BattleScreen
               bs' =
                 bs
-                  { currentBattle       = Just frameState,
+                  { currentBattle = Just frameState,
                     battlePendingFrames = rest,
-                    battleFrameTimer    = leftover,
-                    battleShakeTimer    = maybe 0 (const BattleHandler.animationShakeDuration) shakeSide,
-                    battleShakeTarget   = shakeSide,
-                    battleMenuType      = endingMenuType,
-                    battleBenchCursor   = endingBenchCursor,
-                    battleMoveCursor    = if queueEmptyAfter then 0 else battleMoveCursor bs
+                    battleFrameTimer = leftover,
+                    battleShakeTimer = maybe 0 (const BattleHandler.animationShakeDuration) shakeSide,
+                    battleShakeTarget = shakeSide,
+                    battleMenuType = endingMenuType,
+                    battleBenchCursor = endingBenchCursor,
+                    battleMoveCursor = if queueEmptyAfter then 0 else battleMoveCursor bs
                   }
            in gs {battleScreenState = bs', currentScreen = endingScreen}
 
@@ -219,7 +219,7 @@ damagedSide :: Maybe BattleState -> BattleState -> Maybe Side
 damagedSide Nothing _ = Nothing
 damagedSide (Just prev) next
   | hp playerActive next < hp playerActive prev = Just PlayerSide
-  | hp enemyActive  next < hp enemyActive  prev = Just EnemySide
+  | hp enemyActive next < hp enemyActive prev = Just EnemySide
   | otherwise = Nothing
   where
     hp accessor st = unHP (battlePokemonHp (accessor st))

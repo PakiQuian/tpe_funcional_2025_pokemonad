@@ -68,15 +68,15 @@ candidateActions bState =
 
 extractFeatures :: BattleState -> BattleAction -> FeatureVector
 extractFeatures bState action =
-  let selfActive                          = enemyActive bState
-      opponentActive                      = playerActive bState
-      selfHpRatio                         = safeRatio (unHP (battlePokemonHp selfActive))     (unHP (battlePokemonMaxHp selfActive))
-      opponentHpRatio                     = safeRatio (unHP (battlePokemonHp opponentActive)) (unHP (battlePokemonMaxHp opponentActive))
-      speedAdvantage                      = normalizeSigned (fromIntegral (statsSpeed (pokemonStats (battlePokemonBase selfActive)) - statsSpeed (pokemonStats (battlePokemonBase opponentActive))) / 100.0)
-      (dmgRatio, effNorm, koEstimate)     = moveFeatures   bState action
-      (switchDefGain, switchOffGain)      = switchFeatures bState action
-      isMoveAction                        = case action of ActionMove _   -> 1.0; _ -> 0.0
-      isSwitchAction                      = case action of ActionSwitch _ -> 1.0; _ -> 0.0
+  let selfActive = enemyActive bState
+      opponentActive = playerActive bState
+      selfHpRatio = safeRatio (unHP (battlePokemonHp selfActive)) (unHP (battlePokemonMaxHp selfActive))
+      opponentHpRatio = safeRatio (unHP (battlePokemonHp opponentActive)) (unHP (battlePokemonMaxHp opponentActive))
+      speedAdvantage = normalizeSigned (fromIntegral (statsSpeed (pokemonStats (battlePokemonBase selfActive)) - statsSpeed (pokemonStats (battlePokemonBase opponentActive))) / 100.0)
+      (dmgRatio, effNorm, koEstimate) = moveFeatures bState action
+      (switchDefGain, switchOffGain) = switchFeatures bState action
+      isMoveAction = case action of ActionMove _ -> 1.0; _ -> 0.0
+      isSwitchAction = case action of ActionSwitch _ -> 1.0; _ -> 0.0
    in [ selfHpRatio,
         opponentHpRatio,
         dmgRatio,
@@ -94,18 +94,18 @@ extractFeatures bState action =
 --   actions or out-of-range move indices.
 moveFeatures :: BattleState -> BattleAction -> (Float, Float, Float)
 moveFeatures bState action =
-  let selfActive     = enemyActive bState
+  let selfActive = enemyActive bState
       opponentActive = playerActive bState
    in case action of
         ActionMove moveIdx ->
           case safeAt moveIdx (battlePokemonMoves selfActive) of
             Nothing -> (0.0, 0.5, 0.0)
             Just selectedMove ->
-              let dmg      = unHP (estimateDamage selfActive opponentActive selectedMove)
+              let dmg = unHP (estimateDamage selfActive opponentActive selectedMove)
                   maxOppHp = max 1 (unHP (battlePokemonMaxHp opponentActive))
                   dmgRatio = clamp01 (fromIntegral dmg / fromIntegral maxOppHp)
-                  effNorm  = normalizeTypeEffectiveness (moveTypeEffectiveness selectedMove opponentActive)
-                  ko       = if dmg >= unHP (battlePokemonHp opponentActive) then 1.0 else 0.0
+                  effNorm = normalizeTypeEffectiveness (moveTypeEffectiveness selectedMove opponentActive)
+                  ko = if dmg >= unHP (battlePokemonHp opponentActive) then 1.0 else 0.0
                in (dmgRatio, effNorm, ko)
         _ -> (0.0, 0.5, 0.0)
 
@@ -113,7 +113,7 @@ moveFeatures bState action =
 --   offensive gain). Zero for non-switch actions or invalid bench indices.
 switchFeatures :: BattleState -> BattleAction -> (Float, Float)
 switchFeatures bState action =
-  let selfActive     = enemyActive bState
+  let selfActive = enemyActive bState
       opponentActive = playerActive bState
    in case action of
         ActionSwitch benchIdx ->
