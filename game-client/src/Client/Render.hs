@@ -1,8 +1,8 @@
 module Client.Render (drawWorld) where
 
+import qualified Client.Handlers.BattleHandler as BattleHandler
 import Client.Screens.AISimulatorScreen (drawAISimulatorScreen)
 import Client.Screens.BattleEndScreen (drawBattleEndScreen)
-import qualified Client.Handlers.BattleHandler as BattleHandler
 import Client.Screens.BattleScreen (drawBattleScreen)
 import Client.Screens.MenuScreen (drawMenuScreen)
 import Client.Screens.MultiplayerScreen (drawMultiplayerScreen)
@@ -80,7 +80,7 @@ drawGame gs netSt =
             (battleBenchCursor bss)
             (battleShakeTarget bss)
             (battleShakeTimer bss)
-            (BattleHandler.isWaitingForOpponent bss)
+            (BattleHandler.waitingMessage bss)
         BattleResultScreen ->
           case currentBattle bss of
             Just bState ->

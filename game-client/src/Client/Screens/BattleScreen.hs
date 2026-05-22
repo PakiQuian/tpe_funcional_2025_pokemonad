@@ -34,10 +34,10 @@ import Pokemonad.Core.Move (Move (..))
 import Pokemonad.Core.Pokemon (Pokemon (..))
 import Pokemonad.Core.Types (HP (..), PokemonId (..))
 
-drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map PokemonId Picture -> Map.Map PokemonId Picture -> Int -> BattleMenuType -> Int -> Int -> Maybe Side -> Float -> Bool -> Picture
-drawBattleScreen backgrounds bgIndex maybeState pokeFrontSprites pokeBackSprites menuIndex menuType moveIndex benchIndex shakeTarget shakeTimer waitingForOpponent =
+drawBattleScreen :: [Picture] -> Int -> Maybe BattleState -> Map.Map PokemonId Picture -> Map.Map PokemonId Picture -> Int -> BattleMenuType -> Int -> Int -> Maybe Side -> Float -> Maybe String -> Picture
+drawBattleScreen backgrounds bgIndex maybeState pokeFrontSprites pokeBackSprites menuIndex menuType moveIndex benchIndex shakeTarget shakeTimer waitingMsg =
   let bg = if null backgrounds then blank else backgrounds !! (bgIndex `mod` length backgrounds)
-      enemyOffset  = shakeOffsetFor EnemySide  shakeTarget shakeTimer
+      enemyOffset = shakeOffsetFor EnemySide shakeTarget shakeTimer
       playerOffset = shakeOffsetFor PlayerSide shakeTarget shakeTimer
    in case maybeState of
         Nothing -> pictures [bg, drawTextWithShadow "PREPARING BATTLE..." 0.2 0 white]
@@ -47,20 +47,23 @@ drawBattleScreen backgrounds bgIndex maybeState pokeFrontSprites pokeBackSprites
               drawEnemyUnit (enemyActive state) pokeFrontSprites enemyOffset,
               drawPlayerUnit (playerActive state) pokeBackSprites playerOffset,
               drawBattleLogWindow (battleLog state),
-              if waitingForOpponent
-                then drawWaitingForOpponent
-                else drawBattleMenu (phase state) (playerActive state) (playerBench state) menuIndex menuType moveIndex benchIndex
+              case waitingMsg of
+                Just msg -> drawWaitingMessage msg
+                Nothing -> drawBattleMenu (phase state) (playerActive state) (playerBench state) menuIndex menuType moveIndex benchIndex
             ]
 
 -- | Replaces the action menu while we're waiting on the opponent in MP.
-drawWaitingForOpponent :: Picture
-drawWaitingForOpponent =
-  translate 0 (-280) $
-    pictures
-      [ color overlayDarkColor $ rectangleSolid 1280 160,
-        color white $ rectangleWire 1270 150,
-        translate (-340) (-10) $ scale 0.3 0.3 $ color white $ text "Waiting for opponent..."
-      ]
+--   The message is centered horizontally using a rough char-width estimate.
+drawWaitingMessage :: String -> Picture
+drawWaitingMessage msg =
+  let charWidthAtScale = 15 -- approx half-width per char at scale 0.3
+      xOffset = -fromIntegral (length msg) * charWidthAtScale
+   in translate 0 (-280) $
+        pictures
+          [ color overlayDarkColor $ rectangleSolid 1280 160,
+            color white $ rectangleWire 1270 150,
+            translate xOffset (-10) $ scale 0.3 0.3 $ color white $ text msg
+          ]
 
 -- | Horizontal pixel offset for a sprite when its side is the shake target.
 --   The offset oscillates and decays to 0 as the timer reaches 0.

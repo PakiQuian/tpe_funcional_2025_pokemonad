@@ -7,6 +7,7 @@ module Client.Handlers.BattleHandler
     handleBack,
     isAnimating,
     isWaitingForOpponent,
+    waitingMessage,
     isForcedSwitchPhase,
     isForcedEnemySwitchPhase,
     firstSwitchableBenchIndex,
@@ -26,7 +27,7 @@ import Client.Types
     Screen (..),
     defaultBattleScreenState,
   )
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, isNothing)
 import Pokemonad.AI.Model (QWeights)
 import Pokemonad.Battle.State
   ( BattleAction (..),
@@ -38,14 +39,24 @@ import Pokemonad.Battle.Turn (submitPlayerActionWithEnemyWeights)
 import Pokemonad.Core.Types (Status (..))
 import System.Random (StdGen)
 
--- | True in multiplayer between the moment the user submits their action and
---   the moment the resulting frames arrive. Menu input is locked during this
---   window so the player can't accidentally re-submit a different action.
+-- | True in multiplayer whenever the local player is blocked on the peer:
+--   either after submitting their own action, or while the peer chooses a
+--   replacement after a forced switch on their side. Menu input is locked
+--   during this window.
 isWaitingForOpponent :: BattleScreenState -> Bool
-isWaitingForOpponent s =
-  battleIsMultiplayer s
-    && isJust (battlePendingLocalAction s)
-    && null (battlePendingFrames s)
+isWaitingForOpponent s = isJust (waitingMessage s)
+
+-- | Message to display in place of the action menu when waiting on the peer.
+--   Distinguishes "waiting for their action" from "waiting for their next
+--   pokemon" so the player knows why the menu is locked.
+waitingMessage :: BattleScreenState -> Maybe String
+waitingMessage s
+  | not (battleIsMultiplayer s) = Nothing
+  | not (null (battlePendingFrames s)) = Nothing
+  | isJust (battlePendingLocalAction s) = Just "Waiting for opponent..."
+  | isForcedEnemySwitchPhase s && isNothing (battlePendingLocalAction s) =
+      Just "Waiting for opponent's next pokemon..."
+  | otherwise = Nothing
 
 -- | Seconds between frame pops in the per-step turn animation.
 animationFrameSpacing :: Float
