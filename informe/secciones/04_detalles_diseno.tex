@@ -15,7 +15,9 @@ data BattlePhase
   | BattleEnded Winner
 \end{verbatim}
 
-Cada variante representa un estado legítimo y distinto del combate. El compilador garantiza que toda función que opere sobre \texttt{BattlePhase} deba manejar explícitamente cada constructor mediante \textit{pattern matching} exhaustivo. Si en el futuro se añade un nuevo estado al sistema, el compilador señalará todas las funciones que requieren actualización, convirtiendo un potencial error en tiempo de ejecución en un error en tiempo de compilación. Esta característica fue una de las más valoradas por los autores durante el desarrollo: proporciona garantías que en otros lenguajes solo se obtienen mediante pruebas extensas o convenciones manuales. La comparación con las \textit{sealed interfaces} de Java moderno ilustra que el patrón no es exclusivo de Haskell, pero el nivel de integración con el sistema de tipos de Haskell es significativamente mayor.
+Cada variante representa un estado legítimo y distinto del combate. El compilador garantiza que toda función que opere sobre \texttt{BattlePhase} deba manejar explícitamente cada constructor mediante \textit{pattern matching} exhaustivo. Si en el futuro se añade un nuevo estado al sistema, el compilador señalará todas las funciones que requieren actualización, convirtiendo un potencial error en tiempo de ejecución en un error en tiempo de compilación. Esta característica fue una de las más valoradas por los autores durante el desarrollo: proporciona garantías que en otros lenguajes solo se obtienen mediante pruebas extensas o convenciones manuales.
+
+\medskip
 
 El patrón de \textit{guards} (\texttt{|}) complementa al \textit{pattern matching} para estructurar funciones con múltiples condiciones, evitando el anidamiento de \texttt{if-else} y acercando la lectura del código a la notación matemática por casos:
 
@@ -41,6 +43,8 @@ newtype Level     = Level     { unLevel     :: Int }
 \end{verbatim}
 
 Estas definiciones no generan overhead en runtime (Haskell las elimina en compilación mediante \textit{newtype deriving}), pero previenen errores de transposición de argumentos que de otro modo serían silenciosos.
+
+\medskip
 
 Durante el diseño también se evaluó la posibilidad de modelar la lógica de combate como una \textit{Free Monad}, separando la sintaxis del árbol de decisiones de su interpretación. Esta alternativa fue descartada porque el \texttt{game-engine}, concebido como una calculadora de estado pura, ya cumplía el objetivo de separación de responsabilidades sin la complejidad adicional. La simplicidad de funciones puras con paso explícito de estado resultó suficiente y más legible para el alcance del proyecto.
 
@@ -166,6 +170,8 @@ Las 10 características fueron diseñadas por intuición del dominio del juego (
 \end{itemize}
 
 Un ejemplo del razonamiento de dominio detrás de estas features: cambiar de Pokémon constantemente puede reducir el daño recibido, pero implica desperdiciar un turno de ataque. Las features de ganancia defensiva de cambio y el prior de acción de \textit{switch} capturan este trade-off, permitiendo que el modelo aprenda cuándo vale la pena sacrificar un turno de ataque.
+
+\medskip
 
 El entrenamiento utiliza \textit{self-play}: dos instancias del modelo con los mismos pesos compiten entre sí. Los pesos se actualizan con la regla de diferencia temporal (TD):
 

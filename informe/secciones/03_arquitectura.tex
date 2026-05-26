@@ -30,6 +30,8 @@ data World = World
 
 El campo central \texttt{worldGame :: AppState} concentra el estado lógico de la pantalla actual, el progreso de la partida y el \texttt{BattleState} activo. Su gestión sigue estrictamente el principio de inmutabilidad: ninguna función modifica el registro \texttt{World} en su lugar. En cambio, cada manejador de evento o de tick recibe el \texttt{World} actual y devuelve una copia nueva con los campos actualizados. El estado anterior queda intacto y el flujo de información es unidireccional y predecible.
 
+\medskip
+
 La gestión de la aleatoriedad dentro del núcleo puro merece mención particular. En lugar de recurrir a la mónada \texttt{State StdGen} o a una interfaz de aleatoriedad implícita como \texttt{MonadRandom}, el motor adopta la técnica de \textit{threading explícito del generador}: cada función que requiere aleatoriedad recibe un \texttt{StdGen} como parámetro adicional y devuelve el generador consumido junto con su resultado. Un ejemplo representativo es la función de resolución de turno:
 
 \begin{verbatim}
@@ -38,6 +40,8 @@ executeTurn :: StdGen -> BattleState -> BattleAction
 \end{verbatim}
 
 Esta decisión, motivada por el deseo de no oscurecer el flujo de efectos, tiene una consecuencia directa sobre la legibilidad: la firma de la función hace explícito que consume aleatoriedad y produce un nuevo generador, sin ningún efecto oculto. Refleja fielmente el principio de inmutabilidad: el \texttt{StdGen} original no se modifica; a partir de él se genera y retorna uno nuevo.
+
+\medskip
 
 Los campos \texttt{TVar} y \texttt{TQueue} del registro \texttt{World} son los únicos puntos de estado verdaderamente mutable del sistema. Sin embargo, esta mutabilidad está estrictamente controlada: solo puede modificarse dentro de una transacción \texttt{atomically}, garantizando consistencia bajo concurrencia. El resto del \texttt{World} es un valor Haskell ordinario, inmutable y copiado funcionalmente en cada transformación.
 
