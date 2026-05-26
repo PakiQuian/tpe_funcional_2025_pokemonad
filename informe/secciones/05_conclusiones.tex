@@ -1,14 +1,52 @@
 \section{Conclusiones}
 
 \subsection{Evaluación del Alcance y Resultados}
-% Analizar si se cumplió con el alcance planteado (ni excesivamente largo, ni insuficiente).
-% Evaluar la robustez del motor desarrollado.
+
+Pokemonad cumple con el alcance comprometido en la propuesta aprobada. Los dos subsistemas que justificaban la complejidad del proyecto fueron implementados de forma no trivial y verificable: la arquitectura P2P concurrente mediante un protocolo de sincronización basado en STM con gestión explícita de fases de combate, y el agente de Inteligencia Artificial mediante un modelo de Q-Learning con aproximación lineal entrenado por auto-juego, superando los enfoques heurístico y Minimax originalmente contemplados en la propuesta.
+
+La simplificación deliberada de las mecánicas de combate —únicamente acciones \textit{FIGHT} y \textit{SWITCH}, sin efectos de estado, modificadores de estadísticas ni habilidades pasivas— no constituye una limitación accidental sino una decisión de alcance consciente. En fases tempranas del desarrollo se contaba con una implementación parcial de estas mecánicas adicionales, pero su integración con la lógica de sincronización multijugador y con el vector de características de la IA introducía una complejidad desproporcionada respecto al valor que aportaban. La premisa central del proyecto es el combate Pokémon como vehículo para un motor funcional complejo, no como una réplica fiel del juego original.
+
+La propuesta inicial también contemplaba el uso de \textit{Free Monads} para modelar la lógica de combate y la biblioteca \texttt{lens} para manipulación de estructuras anidadas. Ambas fueron descartadas durante el desarrollo: las Free Monads resultaron innecesarias dado que el engine, concebido como calculadora pura, ya ofrecía la separación de responsabilidades buscada; \texttt{lens} fue reemplazada por accesores explícitos que resultaron más legibles para el dominio concreto del proyecto.
 
 \subsection{Dificultades Encontradas y Resoluciones}
-% Sinceridad sobre los problemas técnicos que enfrentaron con Haskell o las bibliotecas elegidas y cómo lograron sortearlos.
+
+\textbf{Diseño de la Inteligencia Artificial.} El mayor esfuerzo intelectual del proyecto fue anterior al código: la elección y comprensión del algoritmo de aprendizaje, el diseño del vector de características y la construcción del ciclo de auto-juego. Entender por qué la aproximación lineal es preferible a una Q-table completa (espacio de estados intratable) o a una red neuronal (complejidad de entrenamiento desproporcionada para el dominio), y diseñar características que capturen adecuadamente la dinámica del combate, requirió investigación y múltiples iteraciones conceptuales antes de escribir una sola línea de implementación.
+
+\textbf{Cambio forzado en el protocolo multijugador.} El flujo estándar del combate es simétrico: ambos jugadores envían una acción y el host ejecuta el turno. El cambio forzado —cuando un Pokémon se desmaya y debe ser reemplazado antes del siguiente turno— rompe esta simetría e introduce un estado de espera asimétrico. Modelarlo correctamente requirió diseñar \texttt{BattlePhase} como una máquina de estados finita explícita con variantes de cambio forzado, adaptar el protocolo de mensajes para transmitir la fase del estado al cliente, y ajustar la lógica del host para esperar únicamente la acción correspondiente a la fase activa.
+
+\textbf{Curva de aprendizaje de Haskell.} La sintaxis de Haskell es densa e inicialmente opaca para desarrolladores con experiencia previa en lenguajes imperativos. Operadores como \texttt{\$}, \texttt{.}, \verb|>>=| o \verb|<$>|, la notación \texttt{do}, los \textit{guards} y el sistema de tipos avanzado tienen una curva de ingreso significativa. Esta dificultad disminuye notablemente una vez que se comprenden los principios subyacentes, pero representa una barrera real de entrada al ecosistema que demanda tiempo de adaptación.
+
+\textbf{Ausencia de parámetros nombrados.} Haskell carece de la capacidad de nombrar argumentos en el sitio de llamada (a diferencia de Python o Swift), lo que hace que funciones con múltiples parámetros del mismo tipo sean propensas a errores silenciosos de transposición. La solución adoptada fue el uso sistemático de \textit{newtype wrappers} en \texttt{Pokemonad.Core.Types} para dotar de semántica verificable a cada argumento, resolviendo el problema sin costo en runtime.
 
 \subsection{Lecciones Aprendidas}
-% Reflexión final sobre cómo el desarrollo de Pokemonad cambió la perspectiva sobre la programación funcional aplicada a sistemas interactivos.
+
+\textbf{El \textit{pattern matching} exhaustivo es la característica más valiosa del paradigma.} La garantía del compilador de que todos los casos de un ADT están cubiertos previene en tiempo de compilación una categoría entera de errores que en otros lenguajes solo se detectan en tiempo de ejecución. Cada vez que se incorporó un nuevo \texttt{BattlePhase} o un nuevo \texttt{AppMsg} al protocolo, el compilador señaló exactamente qué funciones requerían actualización, convirtiendo la extensibilidad del sistema en un proceso guiado y seguro.
+
+\textbf{La evaluación perezosa habilita estilos de código más claros sin sacrificar performance.} Durante los últimos refactors del proyecto se simplificaron bloques con profundidad excesiva de \texttt{let} anidados adoptando un patrón de ``asignar todo, computar al final'': todos los valores intermedios se definen con nombres descriptivos en el bloque \texttt{let}, y la lógica final se expresa en el \texttt{in} usando esos nombres. La evaluación perezosa garantiza que los valores no utilizados en una rama particular de la lógica no generen costo computacional, haciendo este estilo más legible sin penalización alguna de rendimiento.
+
+\textbf{La separación de núcleo puro y capa de efectos simplifica el razonamiento.} El patrón \textit{Pure Core + Thin IO Layer}, materializado en la separación de los tres paquetes de Cabal, resultó en un sistema cuyo motor de combate puede razonarse y verificarse de forma aislada. Las funciones de \texttt{game-engine} son completamente deterministas dado un \texttt{StdGen} inicial, haciendo que la lógica de combate sea reproducible sin necesidad de levantar ninguna infraestructura de red o interfaz gráfica.
+
+\textbf{STM es preferible a la sincronización manual con locks.} La gestión de la concurrencia mediante transacciones atómicas elimina la posibilidad de \textit{deadlocks} por inversión de orden de adquisición de locks. La garantía de atomicidad compositiva de STM —múltiples operaciones en un bloque \texttt{do atomically} son atómicas como unidad— simplificó significativamente el diseño del protocolo de sincronización entre el hilo de red y el hilo de UI.
 
 \subsection{Trabajo Futuro}
-% Qué módulos o características le agregarían al motor si el desarrollo continuara (nuevas mecánicas, mejoras de latencia, interfaz gráfica, etc.).
+
+De continuar el desarrollo, las extensiones más naturales serían:
+
+\begin{itemize}
+    \item \textbf{Mecánicas de combate completas.} La incorporación de efectos de estado (parálisis, quemadura, sueño), modificadores de estadísticas (\textit{buffs} y \textit{debuffs}), habilidades pasivas e ítems de la mochila es la extensión más obvia. Su impacto en el sistema actual sería amplio: requeriría extender el \texttt{BattleState}, enriquecer el vector de características de la IA y actualizar el protocolo de sincronización multijugador.
+    \item \textbf{Reconexión ante desconexiones de red.} El manejo actual de errores de red es simple: si la conexión cae inesperadamente, el jugador remoto sale con un error. Una desconexión limpia —mediante la acción de salir por el menú— sí envía un mensaje explícito \texttt{AppMsgDisconnect} y ambos cierran el socket de forma ordenada. Un sistema de reconexión requeriría persistir el estado del combate en disco y reestablecerlo al reconectarse.
+    \item \textbf{Entrenamiento continuo en partida.} La IA actualmente se entrena en batch antes de iniciar una partida. Una extensión interesante sería el aprendizaje en tiempo real durante el combate, actualizando los pesos del modelo tras cada turno observado mediante el hilo de entrenamiento de IA y comunicando el resultado al hilo de UI mediante la \texttt{TVar} ya existente. Esta posibilidad fue descartada en el alcance actual por añadir complejidad desproporcionada, y porque la arquitectura P2P sin servidor central no ofrece un punto centralizado donde entrenar el modelo de forma compartida entre partidas.
+    \item \textbf{Soporte para más de dos jugadores.} La arquitectura P2P actual es punto a punto. Un modo torneo requeriría una topología en estrella o en malla, con el host coordinando múltiples conexiones simultáneas mediante un conjunto de \texttt{TQueue} independientes por par de jugadores.
+\end{itemize}
+
+\subsection{Uso de Herramientas de Inteligencia Artificial}
+
+En cumplimiento de los requisitos de transparencia establecidos por la cátedra, los autores declaran el uso de herramientas de IA generativa —incluyendo GitHub Copilot, Claude, ChatGPT y Gemini— a lo largo del proyecto, distinguiendo claramente su rol en cada etapa:
+
+\textbf{Decisiones de arquitectura y diseño.} La separación en tres paquetes, el modelo host-árbitro, el mecanismo de \texttt{BattlePhase} como máquina de estados, la elección de Q-Learning sobre las alternativas evaluadas y el diseño del vector de características fueron decisiones tomadas íntegramente por los autores mediante análisis y discusión conjunta. Las herramientas de IA fueron utilizadas como interlocutores para sondear alternativas, identificar patrones de diseño comunes en proyectos Haskell de alcance similar y cuestionar puntos de falla de cada propuesta. La decisión final en cada caso fue siempre de los autores.
+
+\textbf{Implementación.} El código fue asistido por herramientas de IA generativa, particularmente para la resolución de problemas de sintaxis de Haskell y la generación de código de estructura repetitiva (\textit{boilerplate}). Todo el código generado fue revisado, cuestionado y comprendido por ambos autores antes de ser incorporado al proyecto. Ambos integrantes pueden explicar y defender cualquier fragmento del código fuente presentado.
+
+\textbf{Redacción del informe.} El contenido del informe fue construido a partir del conocimiento real de los autores, articulado mediante sesiones de preguntas dirigidas en las que las herramientas de IA actuaron como interlocutores estructuradores. La redacción final fue asistida por IA, pero el contenido técnico —decisiones, motivaciones, limitaciones y lecciones aprendidas— es íntegramente propio y verificable contra el código fuente del repositorio.
+
+\clearpage

@@ -1,12 +1,74 @@
 \section{Arquitectura del Motor (Solución Propuesta)}
 
 \subsection{Visión General del Sistema}
-% Describir la arquitectura a grandes rasgos (ej. modelo cliente-servidor). 
-% Explicar cómo se comunican las partes.
+
+La arquitectura de Pokemonad se organiza en tres paquetes de Cabal \cite{cabal_guide} con responsabilidades estrictamente delimitadas, reflejando una decisión de diseño tomada desde el inicio del proyecto: hacer explícita y verificable la separación entre la lógica pura del dominio, la comunicación en red y la presentación visual.
+
+\begin{itemize}
+    \item \textbf{\texttt{game-engine}:} Actúa como la ``calculadora'' del sistema. Contiene la totalidad del conocimiento de dominio del combate: la base de datos de los 151 Pokémon originales, sus 197 movimientos, las estadísticas por especie, los entrenadores predefinidos, el cálculo de daño, la resolución de turnos y el motor de Inteligencia Artificial. Sus módulos son en su gran mayoría funciones puras sin efectos secundarios, lo que los hace completamente predecibles, reproducibles y verificables de forma aislada.
+    \item \textbf{\texttt{p2p-net}:} Implementa una biblioteca de comunicación Peer-to-Peer genérica y agnóstica al juego. Gestiona los canales TCP de bajo nivel, la serialización binaria de mensajes mediante tramas enmarcadas, y expone las estructuras de memoria transaccional para la sincronización entre hilos. Este paquete desconoce completamente las reglas de Pokémon; podría reutilizarse para cualquier aplicación que requiera comunicación P2P concurrente.
+    \item \textbf{\texttt{game-client}:} Es el puente que orquesta los dos paquetes anteriores. Integra la interfaz gráfica construida con \texttt{gloss}, consume la API pura del \texttt{game-engine} para aplicar acciones y obtener nuevos estados de combate, y utiliza \texttt{p2p-net} para sincronizar el estado de la partida con el jugador remoto. Es la única capa que tiene conocimiento tanto de las mecánicas del juego como del protocolo de red.
+\end{itemize}
+
+Esta separación en tres paquetes fue una decisión arquitectónica deliberada, no el resultado orgánico del crecimiento del proyecto. El objetivo fue hacer explícitos y no triviales los dos subsistemas de mayor complejidad técnica —la red P2P y la IA— garantizando que cada paquete tuviera una única razón de cambio. Esta estructura se corresponde con el patrón \textit{Pure Core + Thin IO Layer} mencionado en la sección anterior: \texttt{game-engine} es el núcleo puro, mientras que \texttt{game-client} y \texttt{p2p-net} conforman la capa de interacción con el entorno.
 
 \subsection{Gestión del Estado Inmutable}
-% Detallar cómo se resolvió el almacenamiento del estado de Pokemonad.
-% Explicar el flujo de actualización: cómo una acción del jugador genera una copia nueva del estado del mundo en lugar de mutar el anterior.
+
+El estado global del sistema reside en el registro \texttt{World}, definido en \texttt{Client.State} dentro del paquete \texttt{game-client}:
+
+\begin{verbatim}
+data World = World
+  { worldGame       :: AppState
+  , netInQueue      :: TQueue AppMsg
+  , netSubState     :: NetSubState
+  , netSocket       :: Maybe Socket
+  , netConnAsync    :: TVar (Maybe NetConnAsync)
+  , aiTrainingAsync :: TVar (Maybe AITrainingResult)
+  , netIsHost       :: Bool
+  }
+\end{verbatim}
+
+El campo central \texttt{worldGame :: AppState} concentra el estado lógico de la pantalla actual, el progreso de la partida y el \texttt{BattleState} activo. Su gestión sigue estrictamente el principio de inmutabilidad: ninguna función modifica el registro \texttt{World} en su lugar. En cambio, cada manejador de evento o de tick recibe el \texttt{World} actual y devuelve una copia nueva con los campos actualizados. El estado anterior queda intacto y el flujo de información es unidireccional y predecible.
+
+La gestión de la aleatoriedad dentro del núcleo puro merece mención particular. En lugar de recurrir a la mónada \texttt{State StdGen} o a una interfaz de aleatoriedad implícita como \texttt{MonadRandom}, el motor adopta la técnica de \textit{threading explícito del generador}: cada función que requiere aleatoriedad recibe un \texttt{StdGen} como parámetro adicional y devuelve el generador consumido junto con su resultado. Un ejemplo representativo es la función de resolución de turno:
+
+\begin{verbatim}
+executeTurn :: StdGen -> BattleState -> BattleAction
+            -> BattleAction -> ([BattleStep], StdGen)
+\end{verbatim}
+
+Esta decisión, motivada por el deseo de no oscurecer el flujo de efectos, tiene una consecuencia directa sobre la legibilidad: la firma de la función hace explícito que consume aleatoriedad y produce un nuevo generador, sin ningún efecto oculto. Refleja fielmente el principio de inmutabilidad: el \texttt{StdGen} original no se modifica; a partir de él se genera y retorna uno nuevo.
+
+Los campos \texttt{TVar} y \texttt{TQueue} del registro \texttt{World} son los únicos puntos de estado verdaderamente mutable del sistema. Sin embargo, esta mutabilidad está estrictamente controlada: solo puede modificarse dentro de una transacción \texttt{atomically}, garantizando consistencia bajo concurrencia. El resto del \texttt{World} es un valor Haskell ordinario, inmutable y copiado funcionalmente en cada transformación.
 
 \subsection{Ciclo de Vida del Juego (Game Loop)}
-% Explicar cómo funciona el bucle principal del motor, la captura de eventos, la actualización de la lógica y la emisión de resultados a los clientes.
+
+El bucle principal del motor está gestionado por la función \texttt{playIO} de la biblioteca \texttt{gloss}, que actúa como el \textit{runtime} de la aplicación:
+
+\begin{verbatim}
+playIO window black 30 world0 drawWorld handleWorldInput handleWorldTick
+\end{verbatim}
+
+Esta función recibe el estado inicial (\texttt{world0}), la función de renderizado (\texttt{drawWorld :: World -> IO Picture}), el manejador de eventos de entrada (\texttt{handleWorldInput :: Event -> World -> IO World}) y el manejador de avance de tiempo (\texttt{handleWorldTick :: Float -> World -> IO World}). La elección de \texttt{playIO} sobre la variante pura \texttt{play} fue necesaria para poder ejecutar operaciones en las mónadas \texttt{IO} y \texttt{STM} dentro de los manejadores de tick, en particular para consultar las \texttt{TVar} y drenar la \texttt{TQueue} de mensajes de red de forma atómica.
+
+Pokemonad opera con hasta tres hilos de ejecución concurrentes:
+
+\begin{enumerate}
+    \item \textbf{Hilo principal (Gloss, 30 Hz):} Ejecuta el renderizado y los manejadores de eventos y tick. Es el único productor y consumidor del registro \texttt{World}.
+    \item \textbf{Hilo de red:} Lanzado mediante \texttt{forkIO} en \texttt{P2P.Communication.forkRecvLoop} cuando se establece una conexión. Bloquea continuamente sobre el socket TCP esperando datos, decodifica las tramas recibidas y escribe cada \texttt{AppMsg} decodificado en la \texttt{TQueue} de forma atómica.
+    \item \textbf{Hilo de entrenamiento de IA (opcional):} Lanzado mediante \texttt{forkIO} en \texttt{Client.Handlers.AISimulatorHandler} cuando el usuario inicia un ciclo de entrenamiento. Ejecuta el proceso de auto-juego (\textit{self-play}) de Q-Learning de forma completamente asincrónica y escribe el resultado en la \texttt{TVar} correspondiente al finalizar.
+\end{enumerate}
+
+En cada tick de 30 Hz, \texttt{handleWorldTick} ejecuta una secuencia determinista de pasos para integrar toda la información disponible en el nuevo estado del mundo:
+
+\begin{enumerate}
+    \item \texttt{mergeNetAsync}: consulta la \texttt{TVar} de resultado de conexión y, si está disponible, inicializa el subsistema de red y lanza el hilo de recepción.
+    \item \texttt{drainNetInbox}: consume de forma atómica \textit{todos} los mensajes pendientes en la \texttt{TQueue} y los aplica secuencialmente al estado del mundo mediante \texttt{foldl'}.
+    \item \texttt{mergeMultiplayerLobby} / \texttt{mergeMultiplayerBattle}: procesa las transiciones de estado del protocolo multijugador y, si corresponde, ejecuta el siguiente turno de combate.
+    \item \texttt{mergeAITraining}: consulta la \texttt{TVar} de resultado de entrenamiento y, si está disponible, integra los nuevos pesos del modelo al estado de la aplicación.
+    \item \texttt{handleTick}: avanza las animaciones de batalla (sacudidas de sprites, desvanecimientos, desplazamiento del log de mensajes).
+\end{enumerate}
+
+El uso de \texttt{foldl'} (la variante estricta de \texttt{foldl}) en el paso de drenado de mensajes es un ejemplo concreto del control manual de la evaluación en Haskell: dado que Haskell es perezoso por defecto, acumular un \textit{fold} sobre una lista larga sin forzar la evaluación puede generar fugas de espacio (\textit{space leaks}) por la acumulación de \textit{thunks} no evaluados. La forma estricta fuerza la evaluación del acumulador en cada paso, garantizando comportamiento predecible en memoria.
+
+\clearpage

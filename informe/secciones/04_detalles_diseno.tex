@@ -1,12 +1,179 @@
 \section{Detalles de Diseño e Interacción con el Medio}
 
 \subsection{Modelado de Datos}
-% Mostrar y explicar los Tipos de Datos Algebraicos (ADTs) principales definidos en Haskell para los elementos de estrategia, tablero, ataques, etc.
+
+Los Tipos de Datos Algebraicos (ADTs) de Haskell son la herramienta central para representar el dominio del juego de forma precisa y segura en tiempo de compilación. A diferencia de las enumeraciones simples o las jerarquías de clases de los lenguajes orientados a objetos, los ADTs permiten expresar con exactitud qué valores son posibles en cada punto del sistema, y el compilador verifica exhaustivamente que todos esos casos sean tratados.
+
+El ADT más representativo del diseño es \texttt{BattlePhase}, que codifica la máquina de estados finita del combate:
+
+\begin{verbatim}
+data BattlePhase
+  = WaitingForCommand
+  | TurnExecution
+  | WaitingForForcedPlayerSwitch
+  | WaitingForForcedEnemySwitch
+  | BattleEnded Winner
+\end{verbatim}
+
+Cada variante representa un estado legítimo y distinto del combate. El compilador garantiza que toda función que opere sobre \texttt{BattlePhase} deba manejar explícitamente cada constructor mediante \textit{pattern matching} exhaustivo. Si en el futuro se añade un nuevo estado al sistema, el compilador señalará todas las funciones que requieren actualización, convirtiendo un potencial error en tiempo de ejecución en un error en tiempo de compilación. Esta característica fue una de las más valoradas por los autores durante el desarrollo: proporciona garantías que en otros lenguajes solo se obtienen mediante pruebas extensas o convenciones manuales. La comparación con las \textit{sealed interfaces} de Java moderno ilustra que el patrón no es exclusivo de Haskell, pero el nivel de integración con el sistema de tipos de Haskell es significativamente mayor.
+
+El patrón de \textit{guards} (\texttt{|}) complementa al \textit{pattern matching} para estructurar funciones con múltiples condiciones, evitando el anidamiento de \texttt{if-else} y acercando la lectura del código a la notación matemática por casos:
+
+\begin{verbatim}
+continuePlayerCheck bState logs
+  | unHP (battlePokemonHp (playerActive bState)) <= 0 =
+      case firstAliveIndex (playerBench bState) of
+        Just _  -> (bState { phase = WaitingForForcedPlayerSwitch }, ...)
+        Nothing -> (bState { phase = BattleEnded EnemyWon }, ...)
+  | otherwise = (bState { phase = WaitingForCommand }, logs)
+\end{verbatim}
+
+El patrón de \textit{newtype wrappers} fue adoptado extensivamente en \texttt{Pokemonad.Core.Types} para resolver una limitación concreta de Haskell: la ausencia de parámetros nombrados en las funciones. Sin este recurso, una función como \texttt{calculateDamage} con múltiples parámetros enteros resulta ambigua e ilegible en el sitio de llamada:
+
+\begin{verbatim}
+-- Sin newtype: ¿qué es cada número?
+applyAction PlayerSide rng bState (ActionMove 2)
+
+-- Con newtype: la semántica de cada argumento es verificada por el compilador
+newtype HP        = HP        { unHP        :: Int }
+newtype PokemonId = PokemonId { unPokemonId :: Int }
+newtype Level     = Level     { unLevel     :: Int }
+\end{verbatim}
+
+Estas definiciones no generan overhead en runtime (Haskell las elimina en compilación mediante \textit{newtype deriving}), pero previenen errores de transposición de argumentos que de otro modo serían silenciosos.
+
+Durante el diseño también se evaluó la posibilidad de modelar la lógica de combate como una \textit{Free Monad}, separando la sintaxis del árbol de decisiones de su interpretación. Esta alternativa fue descartada porque el \texttt{game-engine}, concebido como una calculadora de estado pura, ya cumplía el objetivo de separación de responsabilidades sin la complejidad adicional. La simplicidad de funciones puras con paso explícito de estado resultó suficiente y más legible para el alcance del proyecto.
 
 \subsection{El Rol de las Mónadas en la Interacción}
-% ESTA SECCIÓN ES CRÍTICA PARA APROBAR.
-% Explicar cómo la app tiene elementos de interacción con el medio y cómo usa mónadas para lograrlo.
-% Detallar el uso de la mónada IO para red/consola, y si usaron State, Reader u otras para manejar el contexto del juego.
+
+Toda interacción de Pokemonad con el entorno —pantalla, red, disco, concurrencia— está mediada por mónadas. El diseño concentra todos los efectos secundarios en la capa \texttt{game-client} y en el módulo \texttt{Pokemonad.AI.Persistence}, manteniendo el núcleo del \texttt{game-engine} completamente puro: 13 de sus 14 módulos no contienen ninguna operación \texttt{IO}.
+
+La \texttt{do}-notation de Haskell es el mecanismo sintáctico que permite expresar secuencias de operaciones monádicas de forma legible. Una expresión como:
+
+\begin{verbatim}
+do
+  x <- operacionA
+  y <- operacionB x
+  pure (combinar x y)
+\end{verbatim}
+
+es azúcar sintáctica equivalente a:
+
+\begin{verbatim}
+operacionA >>= \x -> operacionB x >>= \y -> pure (combinar x y)
+\end{verbatim}
+
+El operador \verb|>>=| (\textit{bind}) secuencia operaciones pasando el resultado de cada una a la siguiente, delegando en cada mónada concreta la semántica de esa composición. La potencia de este mecanismo es que el mismo patrón sintáctico funciona de forma uniforme en contextos radicalmente distintos:
+
+\begin{itemize}
+    \item \textbf{Mónada \texttt{IO}:} Cada \texttt{x <- accion} ejecuta un efecto en el mundo real (leer un sprite del disco, escribir en un socket, inicializar un generador pseudoaleatorio) y vincula el resultado al nombre \texttt{x}. El sistema de tipos garantiza que el código \texttt{IO} no pueda ``escapar'' de su contexto: una función con tipo de retorno \texttt{IO a} solo puede ser invocada desde otra función \texttt{IO}. Esta propiedad es la que permite al compilador garantizar que \texttt{game-engine} está libre de efectos secundarios. Los usos concretos incluyen el bucle principal (\texttt{Main.hs}), los manejadores de \texttt{gloss} (\texttt{Client.Events}), la comunicación de red (\texttt{P2P.Communication}) y la persistencia de pesos de la IA (\texttt{Pokemonad.AI.Persistence}).
+
+    \item \textbf{Mónada \texttt{STM}:} Dentro de un bloque \texttt{atomically}, la \texttt{do}-notation opera sobre \texttt{STM}, cuya semántica de \verb|>>=| es transaccional: si alguna operación dentro del bloque detecta un conflicto con otro hilo, la transacción entera se descarta y se reintenta automáticamente. Esto elimina la posibilidad de \textit{deadlocks} por inversión de orden de adquisición de locks. El uso concreto en el proyecto es el drenado atómico de la cola de mensajes de red:
+    \begin{verbatim}
+drainAll :: TQueue a -> STM [a]
+drainAll q = do
+  mx <- tryReadTQueue q
+  case mx of
+    Nothing -> pure []
+    Just x  -> fmap (x:) (drainAll q)
+    \end{verbatim}
+    Esta función recorre la \texttt{TQueue} hasta vaciarla, y toda la secuencia de lecturas es atómica desde la perspectiva del hilo de red: o se leen todos los mensajes disponibles o ninguno.
+
+    \item \textbf{Mónadas \texttt{Maybe} y \texttt{Either}:} Utilizadas en el núcleo puro para representar operaciones que pueden carecer de resultado o que pueden fallar con un mensaje de error. Por ejemplo, \texttt{switchActive} en \texttt{Pokemonad.Battle.Logic} retorna \texttt{Either String BattleState}: si el Pokémon seleccionado ya está activo o no existe, el resultado es \texttt{Left "mensaje de error"} sin lanzar ninguna excepción. Este estilo convierte los casos de error en valores de primer orden que el compilador obliga a manejar explícitamente.
+\end{itemize}
+
+La distinción fundamental entre \texttt{IO} y \texttt{STM} ilustra el poder del sistema de tipos de Haskell: no es posible ejecutar una operación \texttt{STM} fuera de un \texttt{atomically}, y no es posible llamar a una función \texttt{IO} dentro de un bloque \texttt{STM}. El compilador verifica estas invariantes estáticamente, previniendo una clase entera de errores de concurrencia antes de que el programa sea ejecutado.
 
 \subsection{Lógica Multijugador y Concurrencia}
-% Explicar la gestión de múltiples conexiones simultáneas y la sincronización de las partidas entre distintos clientes conectados al servidor.
+
+\subsubsection*{Modelo Host-Árbitro / Cliente-Receptor}
+
+La arquitectura multijugador adopta un modelo \textbf{host-árbitro / cliente-receptor}: el jugador que inicia la sesión (\textit{host}) es la única fuente de verdad del estado del combate. Ambas instancias conocen las mecánicas del juego, pero solo el host ejecuta los turnos. Esta decisión simplifica radicalmente el protocolo al eliminar la necesidad de reconciliar dos estados divergentes.
+
+\subsubsection*{Serialización del Protocolo}
+
+El protocolo de comunicación se define mediante el ADT \texttt{AppMsg} en \texttt{P2P.Types}:
+
+\begin{verbatim}
+data AppMsg
+  = AppMsgHandshake Handshake
+  | AppMsgTeam [Word32]
+  | AppMsgBattleReady
+  | AppMsgAction PlayerAction
+  | AppMsgBattleState ByteString
+  | AppMsgBattleFrames ByteString
+  | AppMsgDisconnect
+\end{verbatim}
+
+La serialización utiliza la biblioteca \texttt{binary}, que expone la clase de tipos \texttt{Binary} para empaquetar y desempaquetar valores de Haskell a secuencias de bytes. El módulo \texttt{P2P.Serialization} implementa el encuadre de mensajes (\textit{framing}): cada mensaje se precede de su longitud en bytes, permitiendo reconstruir tramas completas desde el flujo continuo de TCP.
+
+\subsubsection*{El Patrón de Perspectiva Invertida}
+
+Un desafío sutil del protocolo surge del hecho de que el \texttt{BattleState} siempre está definido desde la perspectiva del jugador local: \texttt{playerActive} es invariantemente quien usa la pantalla actual. Cuando el host ejecuta un turno, los frames resultantes están orientados desde \textit{su} perspectiva; enviarlos directamente al cliente produciría una representación invertida donde el cliente vería a su rival como ``jugador''.
+
+Para resolver esto, el motor define las funciones \texttt{flipBattleState} y \texttt{flipBattleStep}, que intercambian los campos de jugador y enemigo en el estado y en cada frame de animación. El host aplica este flip antes de serializar y enviar los frames:
+
+\begin{verbatim}
+let framesForPeer = map flipBattleStep frames
+    encoded = BL.toStrict (encode framesForPeer)
+sendMsg sock (AppMsgBattleFrames encoded)
+\end{verbatim}
+
+El cliente permanece completamente ignorante de que existe una perspectiva opuesta: siempre recibe los frames ya orientados correctamente y simplemente los renderiza. Este diseño mantiene al cliente en un rol pasivo y concentra toda la complejidad de coordinación en el host.
+
+\subsubsection*{Manejo del Cambio Forzado}
+
+El flujo estándar del combate es simétrico: ambos jugadores envían una acción, el host ejecuta el turno y distribuye los frames resultantes. Sin embargo, cuando el Pokémon activo de un jugador se desmaya, ese jugador debe elegir un reemplazo \textit{antes} de que el siguiente turno pueda resolverse. Esta asimetría introduce la mayor complejidad del protocolo multijugador.
+
+La solución se articula a través de \texttt{BattlePhase} como máquina de estados: cuando \texttt{resolveTurnAfterDamageMulti} detecta un Pokémon con HP en cero y al menos un sustituto disponible en el banco, transiciona el estado a \texttt{WaitingForForcedPlayerSwitch} o \texttt{WaitingForForcedEnemySwitch} según corresponda. Este estado es serializado como parte del \texttt{BattleState} y transmitido al cliente mediante \texttt{AppMsgBattleState}.
+
+Al recibir el estado, el cliente decodifica la fase y el sistema de UI automáticamente impone el menú de selección de Pokémon, impidiendo cualquier otra acción. En el host, la función \texttt{mergeMultiplayerBattle} solo procede a ejecutar el turno cuando la acción correspondiente a la fase está disponible, retornando el mundo sin cambios en caso contrario:
+
+\begin{verbatim}
+WaitingForForcedEnemySwitch ->
+  case battlePendingRemoteAction bss of
+    Just remoteAction -> executeMPTurn ...
+    Nothing           -> pure w  -- aguarda sin bloquear el hilo de UI
+\end{verbatim}
+
+Este diseño convierte el tick de \texttt{gloss} en un bucle de encuesta (\textit{polling}) eficiente: el host revisa en cada frame si las condiciones para ejecutar el turno están satisfechas, sin bloquear el hilo principal.
+
+\subsubsection*{Inteligencia Artificial: Q-Learning con Auto-Juego}
+
+Para el modo de un jugador se evaluaron tres enfoques para el agente oponente:
+
+\begin{enumerate}
+    \item \textbf{Heurística simple:} Ordenar los ataques disponibles por efectividad y seleccionar con aleatoriedad inversamente proporcional a la dificultad. Simple de implementar, pero incapaz de generalizar estrategias no evidentes como la gestión del banco de Pokémon.
+    \item \textbf{Minimax:} Exploración del árbol de estados del combate con función de evaluación en los nodos hoja. Descartado por la explosión combinatoria: el espacio de estados de un combate Pokémon es demasiado amplio para hacer practicable la exploración exhaustiva por árbol.
+    \item \textbf{Q-Learning con aproximación lineal:} Aprendizaje por refuerzo que estima el valor de las acciones a partir de características del estado. Seleccionado por su capacidad de generalizar estrategias complejas, sus garantías de convergencia conocidas y su complejidad de implementación adecuada al alcance del proyecto. La familiaridad de los autores con técnicas de aprendizaje por refuerzo, adquirida en la materia Sistemas de Inteligencia Artificial, influyó también en esta decisión.
+\end{enumerate}
+
+El modelo representa el valor esperado de tomar una acción $a$ en un estado $s$ como una combinación lineal de características:
+
+\[ Q(s, a) = b + \mathbf{w} \cdot \phi(s, a) \]
+
+donde $b$ es un sesgo escalar, $\mathbf{w}$ es el vector de pesos aprendibles y $\phi(s,a)$ es el vector de 10 características extraídas del estado. La elección de aproximación lineal sobre una red neuronal se justifica por la complejidad de entrenamiento: para el espacio de acción reducido del proyecto (solo \textit{FIGHT} o \textit{SWITCH}) y el conjunto de características ya significativas, la linealidad es suficiente, más interpretable y más estable de entrenar con la regla de diferencia temporal.
+
+Las 10 características fueron diseñadas por intuición del dominio del juego (\textit{feature engineering}):
+
+\begin{itemize}
+    \item Razón de HP propio y del enemigo (posición de ventaja global).
+    \item Daño esperado normalizado y efectividad de tipo del movimiento disponible.
+    \item Probabilidad estimada de noquear al rival en este turno.
+    \item Ventaja de velocidad (determina quién ataca primero en el turno).
+    \item Ganancia ofensiva y defensiva de realizar un cambio de Pokémon.
+    \item Priors de acción (\textit{fight} vs. \textit{switch}) para capturar sesgos base de estrategia.
+\end{itemize}
+
+Un ejemplo del razonamiento de dominio detrás de estas features: cambiar de Pokémon constantemente puede reducir el daño recibido, pero implica desperdiciar un turno de ataque. Las features de ganancia defensiva de cambio y el prior de acción de \textit{switch} capturan este trade-off, permitiendo que el modelo aprenda cuándo vale la pena sacrificar un turno de ataque.
+
+El entrenamiento utiliza \textit{self-play}: dos instancias del modelo con los mismos pesos compiten entre sí. Los pesos se actualizan con la regla de diferencia temporal (TD):
+
+\[ \delta = r + \gamma \cdot \max_{a'} Q(s', a') - Q(s, a) \]
+\[ \mathbf{w} \leftarrow \mathbf{w} + \alpha \cdot \delta \cdot \phi(s,a) \]
+
+donde $r$ es la recompensa inmediata, $\gamma$ el factor de descuento y $\alpha$ la tasa de aprendizaje. La selección de acciones sigue una política $\epsilon$-greedy cuyo parámetro varía según la dificultad: desde un 35\% de exploración en dificultad fácil hasta 0\% en el nivel extremo.
+
+Todo el ciclo de entrenamiento (\texttt{Pokemonad.AI.Training}) es completamente puro: el \texttt{StdGen} se enhebra explícitamente a través de cada episodio de auto-juego, y los pesos se actualizan mediante funciones \texttt{tdUpdate :: ... -> QWeights -> QWeights} sin ningún efecto secundario. El único contacto con \texttt{IO} ocurre en \texttt{Pokemonad.AI.Persistence}, que serializa los pesos aprendidos al disco al finalizar el entrenamiento.
+
+\clearpage
