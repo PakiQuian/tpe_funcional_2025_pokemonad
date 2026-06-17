@@ -5,6 +5,8 @@ module Pokemonad.AI.Persistence
     saveCanonicalCheckpoint,
     loadCheckpointData,
     loadCheckpointWeights,
+    encodeCheckpoint,
+    decodeCheckpoint,
   )
 where
 

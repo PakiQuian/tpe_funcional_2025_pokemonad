@@ -30,3 +30,18 @@ library
         mtl
 
     default-language: Haskell2010
+
+test-suite game-engine-tests
+    type:             exitcode-stdio-1.0
+    main-is:          Main.hs
+    hs-source-dirs:   test
+
+    build-depends:
+        base >= 4.14 && < 5,
+        game-engine,
+        random,
+        tasty,
+        tasty-hunit,
+        tasty-quickcheck
+
+    default-language: Haskell2010

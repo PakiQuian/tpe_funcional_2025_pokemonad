@@ -6,6 +6,7 @@ module Pokemonad.AI.Training
     runTrainingEpochsFrom,
     runTrainingEpochsDetailed,
     runTrainingEpochsDetailedFrom,
+    tdUpdate,
   )
 where
 
